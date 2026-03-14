@@ -25,7 +25,11 @@ export function DetailsPanel({ node, onClose }: DetailsPanelProps) {
             <div className="k">OS</div>
             <div>{node.os || "n/a"}</div>
             <div className="k">Seen</div>
-            <div>{formatLastSeen(node)}</div>
+            <div>{formatNodeTimestamp(node, "lastSeen")}</div>
+            <div className="k">Last handshake</div>
+            <div>{formatNodeTimestamp(node, "lastHandshake")}</div>
+            <div className="k">Last write</div>
+            <div>{formatNodeTimestamp(node, "lastWrite")}</div>
             <div className="k">Relay</div>
             <div>{node.relay || "unknown"}</div>
             <div className="k">Tags</div>
@@ -47,17 +51,26 @@ export function DetailsPanel({ node, onClose }: DetailsPanelProps) {
   );
 }
 
-function formatLastSeen(node: GraphNode): string {
-  if (node.role === "self") {
+type NodeTimestampField = "lastHandshake" | "lastSeen" | "lastWrite";
+
+export function formatNodeTimestamp(node: GraphNode, field: NodeTimestampField): string {
+  if (node.role === "self" && field === "lastSeen") {
     return "current node";
   }
-  if (!node.lastSeen) {
+
+  const value = node[field];
+  if (!value) {
     return "n/a";
   }
 
-  const timestamp = Date.parse(node.lastSeen);
+  const timestamp = Date.parse(value);
   if (Number.isNaN(timestamp)) {
-    return node.lastSeen;
+    return value;
+  }
+
+  const parsedDate = new Date(timestamp);
+  if (parsedDate.getUTCFullYear() <= 1) {
+    return "n/a";
   }
 
   const elapsedMs = Math.max(0, Date.now() - timestamp);
@@ -79,5 +92,5 @@ function formatLastSeen(node: GraphNode): string {
     return `${days}d ago`;
   }
 
-  return new Date(timestamp).toLocaleString();
+  return parsedDate.toLocaleString();
 }

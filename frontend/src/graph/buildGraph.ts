@@ -20,7 +20,9 @@ function normalizeNode(raw: {
   hostname?: string;
   ip?: string;
   os?: string;
+  lastHandshake?: string;
   lastSeen?: string;
+  lastWrite?: string;
   tags?: string[];
   routes?: string[];
   online?: boolean | null;
@@ -43,7 +45,9 @@ function normalizeNode(raw: {
     hostname,
     ip,
     os: raw.os || "",
+    lastHandshake: raw.lastHandshake || "",
     lastSeen: raw.lastSeen || "",
+    lastWrite: raw.lastWrite || "",
     tags,
     routes,
     online: role === "self" ? true : (raw.online ?? null),
@@ -74,7 +78,9 @@ export function buildGraphFromStatus(status: TailscaleStatus): GraphData {
       hostname: selfRaw.HostName || "",
       ip: selfRaw.TailscaleIPs?.[0] || "",
       os: selfRaw.OS || "",
+      lastHandshake: selfRaw.LastHandshake || "",
       lastSeen: selfRaw.LastSeen || "",
+      lastWrite: selfRaw.LastWrite || "",
       tags: selfRaw.Tags || [],
       routes: selfRaw.PrimaryRoutes || selfRaw.AllowedIPs || [],
       online: true,
@@ -102,7 +108,9 @@ export function buildGraphFromStatus(status: TailscaleStatus): GraphData {
         hostname: peerRaw.HostName || "",
         ip: peerRaw.TailscaleIPs?.[0] || "",
         os: peerRaw.OS || "",
+        lastHandshake: peerRaw.LastHandshake || "",
         lastSeen: peerRaw.LastSeen || "",
+        lastWrite: peerRaw.LastWrite || "",
         tags: peerRaw.Tags || [],
         routes: peerRaw.PrimaryRoutes || peerRaw.AllowedIPs || [],
         online: peerRaw.Online ?? null,

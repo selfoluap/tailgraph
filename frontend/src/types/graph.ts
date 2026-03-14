@@ -5,7 +5,9 @@ export interface GraphNode {
   hostname: string;
   ip: string;
   os: string;
+  lastHandshake: string;
   lastSeen: string;
+  lastWrite: string;
   tags: string[];
   routes: string[];
   online: boolean | null;

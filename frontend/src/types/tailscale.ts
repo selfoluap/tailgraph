@@ -5,7 +5,9 @@ export interface TailscalePeer {
   ExitNode?: boolean;
   ExitNodeOption?: boolean;
   HostName?: string;
+  LastHandshake?: string;
   LastSeen?: string;
+  LastWrite?: string;
   OS?: string;
   Online?: boolean;
   PrimaryRoutes?: string[];
