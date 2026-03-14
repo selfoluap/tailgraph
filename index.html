@@ -70,7 +70,7 @@
       pointer-events: auto;
     }
 
-    .chip, .iconbtn, .toolbarbtn {
+    .chip, .toolbarbtn {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 999px;
@@ -81,15 +81,6 @@
     .chip {
       padding: 8px 10px;
       font-size: 12px;
-    }
-
-    .iconbtn {
-      width: 42px;
-      height: 42px;
-      display: grid;
-      place-items: center;
-      font-size: 18px;
-      cursor: pointer;
     }
 
     .toolbarbtn {
@@ -149,18 +140,17 @@
 
     #controls {
       display: grid;
+      gap: 12px;
+    }
+
+    .searchRow {
+      display: grid;
       gap: 8px;
     }
 
-    .row {
+    .filterGrid {
       display: grid;
-      grid-template-columns: 1fr 110px;
-      gap: 8px;
-    }
-
-    .row3 {
-      display: grid;
-      grid-template-columns: 1fr 110px 110px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
     }
 
@@ -177,33 +167,24 @@
       padding: 12px;
     }
 
+    .controlGroup {
+      display: grid;
+      gap: 6px;
+    }
+
+    .controlLabel {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
     .sectionTitle {
       font-size: 12px;
       color: var(--muted);
       margin: 12px 0 8px;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-    }
-
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-
-    .legendItem {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
     }
 
     .list {
@@ -297,16 +278,13 @@
       cursor: pointer;
     }
 
-    .hint {
-      font-size: 12px;
-      color: var(--muted);
-      margin-top: 8px;
-      line-height: 1.45;
-    }
-
     @media (max-width: 899px) {
       .topbar {
         flex-direction: column;
+      }
+
+      .filterGrid {
+        grid-template-columns: 1fr;
       }
     }
 
@@ -315,7 +293,7 @@
         left: 16px;
         right: auto;
         bottom: 16px;
-        width: 390px;
+        width: min(500px, calc(100vw - 32px));
         border: 1px solid var(--line);
         border-radius: 18px;
         transform: translateY(0);
@@ -346,13 +324,11 @@
   <div class="topbar">
     <div class="chips">
       <div class="chip" id="generatedAtChip">generated: --</div>
-      <div class="chip">drag • pinch • tap</div>
     </div>
     <div class="toolbar">
       <button class="toolbarbtn" id="recenterBtn">Recenter</button>
       <button class="toolbarbtn" id="freezeBtn">Freeze</button>
       <button class="toolbarbtn" id="refreshBtn">Auto-refresh</button>
-      <button class="iconbtn" id="toggleSheet">☰</button>
     </div>
   </div>
 
@@ -363,46 +339,43 @@
 
     <div class="sheetContent">
       <div id="controls">
-        <div class="row">
-          <input id="search" placeholder="Search name, IP, DNS, tag, OS">
-          <select id="status">
-            <option value="all">All</option>
-            <option value="online">Online</option>
-            <option value="offline">Offline</option>
-            <option value="unknown">Unknown</option>
-          </select>
+        <div class="searchRow">
+          <div class="controlGroup">
+            <div class="controlLabel">Search</div>
+            <input id="search" placeholder="Search name, IP, DNS, tag, OS">
+          </div>
         </div>
 
-        <div class="row3">
-          <select id="tagFilter">
-            <option value="all">All tags</option>
-          </select>
-          <select id="specialFilter">
-            <option value="all">All roles</option>
-            <option value="exit">Exit</option>
-            <option value="router">Router</option>
-            <option value="special">Special</option>
-          </select>
-          <button class="toolbarbtn" id="hideOfflineBtn">Hide offline</button>
+        <div class="filterGrid">
+          <div class="controlGroup">
+            <div class="controlLabel">Status</div>
+            <select id="status">
+              <option value="all">All</option>
+              <option value="online">Online</option>
+              <option value="offline">Offline</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </div>
+          <div class="controlGroup">
+            <div class="controlLabel">Tags</div>
+            <select id="tagFilter">
+              <option value="all">All tags</option>
+            </select>
+          </div>
+          <div class="controlGroup">
+            <div class="controlLabel">Roles</div>
+            <select id="specialFilter">
+              <option value="all">All roles</option>
+              <option value="exit">Exit</option>
+              <option value="router">Router</option>
+              <option value="special">Special</option>
+            </select>
+          </div>
         </div>
-      </div>
-
-      <div class="sectionTitle">Legend</div>
-      <div class="legend">
-        <div class="legendItem"><span class="dot" style="background: var(--self)"></span> This node</div>
-        <div class="legendItem"><span class="dot" style="background: var(--online)"></span> Online</div>
-        <div class="legendItem"><span class="dot" style="background: var(--offline)"></span> Offline</div>
-        <div class="legendItem"><span class="dot" style="background: var(--unknown)"></span> Unknown</div>
-        <div class="legendItem"><span class="badge exit">EXIT</span></div>
-        <div class="legendItem"><span class="badge router">ROUTE</span></div>
       </div>
 
       <div class="sectionTitle">Nodes</div>
       <div class="list" id="list"></div>
-      <div class="hint">
-        This graph is built from <code>/status.json</code>, which comes from
-        <code>tailscale status --json</code> on the server.
-      </div>
     </div>
   </div>
 
@@ -429,12 +402,10 @@
 
   const sheetEl = document.getElementById('sheet');
   const handleWrapEl = document.getElementById('handleWrap');
-  const toggleSheetEl = document.getElementById('toggleSheet');
 
   const recenterBtn = document.getElementById('recenterBtn');
   const freezeBtn = document.getElementById('freezeBtn');
   const refreshBtn = document.getElementById('refreshBtn');
-  const hideOfflineBtn = document.getElementById('hideOfflineBtn');
   const generatedAtChip = document.getElementById('generatedAtChip');
 
   let W = 0;
@@ -457,7 +428,6 @@
 
   let frozen = false;
   let autoRefresh = false;
-  let hideOffline = false;
   let refreshTimer = null;
 
   let view = { x: 0, y: 0, scale: 1 };
@@ -707,8 +677,6 @@
     const special = specialFilterEl.value;
 
     return graph.nodes.filter(n => {
-      if (hideOffline && n.role !== 'self' && n.online === false) return false;
-
       const okStatus = status === 'all' || n.role === 'self' || statusText(n) === status;
       if (!okStatus) return false;
 
@@ -778,25 +746,15 @@
       ? n.tags.map(t => `<span class="badge">${esc(t)}</span>`).join('')
       : '<span class="badge">none</span>';
 
-    const routes = (n.routes || []).length
-      ? n.routes.map(r => `<span class="badge router">${esc(r)}</span>`).join('')
-      : '<span class="badge">none</span>';
-
     detailsBodyEl.innerHTML = `
       <h2>${esc(n.name)}</h2>
       <div class="kv">
         <div class="k">Status</div><div>${esc(statusText(n))}</div>
         <div class="k">IP</div><div>${esc(n.ip || 'n/a')}</div>
         <div class="k">DNS</div><div>${esc(n.dns || 'n/a')}</div>
-        <div class="k">Hostname</div><div>${esc(n.hostname || 'n/a')}</div>
         <div class="k">OS</div><div>${esc(n.os || 'n/a')}</div>
-        <div class="k">Active</div><div>${esc(String(n.active))}</div>
         <div class="k">Relay</div><div>${esc(n.relay || 'unknown')}</div>
-        <div class="k">Exit node</div><div>${n.exitNode ? 'yes' : 'no'}</div>
-        <div class="k">Exit option</div><div>${n.exitNodeOption ? 'yes' : 'no'}</div>
-        <div class="k">Subnet router</div><div>${n.subnetRouter ? 'yes' : 'no'}</div>
         <div class="k">Tags</div><div>${tags}</div>
-        <div class="k">Routes</div><div>${routes}</div>
       </div>
     `;
 
@@ -998,14 +956,6 @@
     }
   }
 
-  function setHideOffline(next) {
-    hideOffline = next;
-    hideOfflineBtn.classList.toggle('active', hideOffline);
-    hideOfflineBtn.textContent = hideOffline ? 'Show offline' : 'Hide offline';
-    renderList();
-    draw();
-  }
-
   async function fetchStatus() {
     const res = await fetch(`/status.json?ts=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) {
@@ -1059,12 +1009,6 @@
       sheetEl.classList.remove('open');
       sheetEl.style.transform = 'translateY(58%)';
     }
-  }
-
-  function toggleSheet() {
-    if (window.innerWidth >= 900) return;
-    sheetState = sheetState === 'open' ? 'collapsed' : 'open';
-    applySheetState(true);
   }
 
   function startSheetDrag(clientY) {
@@ -1225,17 +1169,12 @@
     endSheetDrag();
   });
 
-  toggleSheetEl.addEventListener('click', toggleSheet);
   closeDetailsEl.addEventListener('click', hideDetails);
 
   recenterBtn.addEventListener('click', recenter);
 
   freezeBtn.addEventListener('click', () => {
     setFrozen(!frozen);
-  });
-
-  hideOfflineBtn.addEventListener('click', () => {
-    setHideOffline(!hideOffline);
   });
 
   refreshBtn.addEventListener('click', () => {
@@ -1286,4 +1225,3 @@
 </script>
 </body>
 </html>
-
