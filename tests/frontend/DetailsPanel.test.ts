@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DetailsPanel } from "../../frontend/src/components/DetailsPanel";
@@ -56,6 +56,7 @@ describe("DetailsPanel", () => {
       }),
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Expand details" }));
     expect(screen.getByText("1m ago")).toBeInTheDocument();
     expect(screen.getByText("just now")).toBeInTheDocument();
     expect(screen.getByText("3m ago")).toBeInTheDocument();
@@ -76,6 +77,7 @@ describe("DetailsPanel", () => {
       }),
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Expand details" }));
     expect(screen.getAllByText("n/a")).toHaveLength(3);
   });
 
@@ -93,6 +95,7 @@ describe("DetailsPanel", () => {
       }),
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Expand details" }));
     expect(screen.getByText("recent-ish")).toBeInTheDocument();
     expect(screen.getByText("unknown")).toBeInTheDocument();
     expect(screen.getByText("never")).toBeInTheDocument();
@@ -112,11 +115,12 @@ describe("DetailsPanel", () => {
       }),
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Expand details" }));
     expect(screen.getAllByText("n/a")).toHaveLength(3);
   });
 
   it("renders discovered services and fallback empty state", () => {
-    const { rerender } = render(
+    const { unmount } = render(
       React.createElement(DetailsPanel, {
         node: makeNode(),
         onClose: () => {},
@@ -125,12 +129,15 @@ describe("DetailsPanel", () => {
       }),
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Expand details" }));
     expect(screen.getByRole("link", { name: "fastapi 8000/tcp" })).toHaveAttribute(
       "href",
       "http://beta.tail.ts.net:8000",
     );
 
-    rerender(
+    unmount();
+
+    render(
       React.createElement(DetailsPanel, {
         node: makeNode({
           services: [],
@@ -143,6 +150,7 @@ describe("DetailsPanel", () => {
       }),
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Expand details" }));
     expect(screen.getByText("no configured service ports reachable")).toBeInTheDocument();
   });
 
@@ -158,9 +166,29 @@ describe("DetailsPanel", () => {
       }),
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Expand details" }));
     expect(screen.getByRole("link", { name: "https 443/tcp" })).toHaveAttribute(
       "href",
       "https://beta.tail.ts.net:443",
     );
+  });
+
+  it("shows important fields before expansion", () => {
+    render(
+      React.createElement(DetailsPanel, {
+        node: makeNode(),
+        onClose: () => {},
+        onAddGroup: () => {},
+        onRemoveGroup: () => {},
+      }),
+    );
+
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("IP")).toBeInTheDocument();
+    expect(screen.getByText("Groups")).toBeInTheDocument();
+    expect(screen.getByText("Tailscale Tags")).toBeInTheDocument();
+    expect(screen.queryByText("DNS")).not.toBeInTheDocument();
+    expect(screen.queryByText("Services")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand details" })).toBeInTheDocument();
   });
 });

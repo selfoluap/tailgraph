@@ -25,6 +25,65 @@ describe("fetchStatus", () => {
     );
   });
 
+  it("loads and saves graph configs with view ids", async () => {
+    import.meta.env.VITE_API_BASE_URL = "https://api.example.test/";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          activeView: "view2",
+          views: {
+            view1: { nodes: {}, viewport: null, updatedAt: null },
+            view2: { nodes: { peer1: { x: 1, y: 2 } }, viewport: { x: 3, y: 4, scale: 1 }, updatedAt: 123 },
+          },
+          nodes: { peer1: { x: 1, y: 2 } },
+          viewport: { x: 3, y: 4, scale: 1 },
+          updatedAt: 123,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          config: {
+            activeView: "view2",
+            views: {
+              view1: { nodes: {}, viewport: null, updatedAt: null },
+              view2: {
+                nodes: { peer1: { x: 5, y: 6 } },
+                viewport: { x: 7, y: 8, scale: 1.25 },
+                updatedAt: 124,
+              },
+            },
+            nodes: { peer1: { x: 5, y: 6 } },
+            viewport: { x: 7, y: 8, scale: 1.25 },
+            updatedAt: 124,
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { fetchGraphConfig, saveGraphConfig } = await import("../../frontend/src/api/status");
+    await fetchGraphConfig();
+    await saveGraphConfig({ peer1: { x: 5, y: 6 } }, { x: 7, y: 8, scale: 1.25 }, "view2");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "https://api.example.test/config.json", {
+      cache: "no-store",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "https://api.example.test/config.json", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        viewId: "view2",
+        nodes: { peer1: { x: 5, y: 6 } },
+        viewport: { x: 7, y: 8, scale: 1.25 },
+      }),
+    });
+  });
+
   it("loads and saves groups on the dedicated endpoint", async () => {
     import.meta.env.VITE_API_BASE_URL = "https://api.example.test/";
     const fetchMock = vi

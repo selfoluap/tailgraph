@@ -12,6 +12,7 @@ interface DetailsPanelProps {
 
 export function DetailsPanel({ node, onClose, onAddGroup, onRemoveGroup }: DetailsPanelProps) {
   const [groupDraft, setGroupDraft] = useState("");
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     setGroupDraft("");
@@ -30,18 +31,6 @@ export function DetailsPanel({ node, onClose, onAddGroup, onRemoveGroup }: Detai
             <div>{statusText(node)}</div>
             <div className="k">IP</div>
             <div>{node.ip || "n/a"}</div>
-            <div className="k">DNS</div>
-            <div>{node.dns || "n/a"}</div>
-            <div className="k">OS</div>
-            <div>{node.os || "n/a"}</div>
-            <div className="k">Seen</div>
-            <div>{formatNodeTimestamp(node, "lastSeen")}</div>
-            <div className="k">Last handshake</div>
-            <div>{formatNodeTimestamp(node, "lastHandshake")}</div>
-            <div className="k">Last write</div>
-            <div>{formatNodeTimestamp(node, "lastWrite")}</div>
-            <div className="k">Relay</div>
-            <div>{node.relay || "unknown"}</div>
             <div className="k">Groups</div>
             <div>
               <div className="groupEditor">
@@ -97,27 +86,51 @@ export function DetailsPanel({ node, onClose, onAddGroup, onRemoveGroup }: Detai
                 <span className="badge">none</span>
               )}
             </div>
-            <div className="k">Services</div>
-            <div>
-              {node.services.length > 0 ? (
-                node.services.map((service) => (
-                  <a
-                    className="badge service-link"
-                    href={buildServiceUrl(node, service.port, service.protocol, service.label)}
-                    key={`${service.protocol}-${service.port}`}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    {service.label} {service.port}/{service.protocol}
-                  </a>
-                ))
-              ) : (
-                <span>{serviceEmptyState(node)}</span>
-              )}
-            </div>
-            <div className="k">Service scan</div>
-            <div>{formatServiceScan(node)}</div>
           </div>
+          <button
+            className="detailsExpandButton"
+            aria-label={expanded ? "Collapse details" : "Expand details"}
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
+          >
+            {expanded ? "Collapse ^" : "Expand v"}
+          </button>
+          {expanded ? (
+            <div className="kv detailsExtra">
+              <div className="k">DNS</div>
+              <div>{node.dns || "n/a"}</div>
+              <div className="k">OS</div>
+              <div>{node.os || "n/a"}</div>
+              <div className="k">Seen</div>
+              <div>{formatNodeTimestamp(node, "lastSeen")}</div>
+              <div className="k">Last handshake</div>
+              <div>{formatNodeTimestamp(node, "lastHandshake")}</div>
+              <div className="k">Last write</div>
+              <div>{formatNodeTimestamp(node, "lastWrite")}</div>
+              <div className="k">Relay</div>
+              <div>{node.relay || "unknown"}</div>
+              <div className="k">Services</div>
+              <div>
+                {node.services.length > 0 ? (
+                  node.services.map((service) => (
+                    <a
+                      className="badge service-link"
+                      href={buildServiceUrl(node, service.port, service.protocol, service.label)}
+                      key={`${service.protocol}-${service.port}`}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {service.label} {service.port}/{service.protocol}
+                    </a>
+                  ))
+                ) : (
+                  <span>{serviceEmptyState(node)}</span>
+                )}
+              </div>
+              <div className="k">Service scan</div>
+              <div>{formatServiceScan(node)}</div>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

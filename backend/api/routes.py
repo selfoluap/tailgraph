@@ -54,6 +54,7 @@ def build_api_router(
             "config": layout_store.save(
                 payload.get("nodes") or {},
                 payload.get("viewport"),
+                payload.get("viewId") or payload.get("activeView") or "view1",
             ),
         }
 

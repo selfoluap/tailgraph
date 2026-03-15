@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchDeviceGroups, fetchGraphConfig, fetchStatus, saveDeviceGroups, saveGraphConfig } from "./api/status";
+import {
+  fetchDeviceGroups,
+  fetchGraphConfig,
+  fetchStatus,
+  saveDeviceGroups,
+  saveGraphConfig,
+  type LayoutConfig,
+} from "./api/status";
 import { CanvasGraph } from "./components/CanvasGraph";
 import { ControlSheet } from "./components/ControlSheet";
 import { DetailsPanel } from "./components/DetailsPanel";
+import { RightSidebar } from "./components/RightSidebar";
 import { TopBar } from "./components/TopBar";
 import { buildGraphFromStatus } from "./graph/buildGraph";
 import { filterNodes } from "./graph/filterNodes";
+import { orderNodesByGroups } from "./graph/orderNodes";
 import { useAutoRefresh } from "./hooks/useAutoRefresh";
 import type { FiltersState, GraphData, GraphNode, NodePositionMap, ViewportState } from "./types/graph";
 
@@ -25,6 +34,19 @@ const emptyGraph: GraphData = {
   allGroups: [],
   allTags: [],
 };
+
+const defaultViewport: ViewportState = { x: 0, y: 0, scale: 1 };
+const viewIds = ["view1", "view2", "view3", "view4", "view5"] as const;
+
+function emptyLayoutConfig(): LayoutConfig {
+  return { nodes: {}, viewport: null, updatedAt: null };
+}
+
+function normalizeViews(views?: Record<string, LayoutConfig>): Record<string, LayoutConfig> {
+  return Object.fromEntries(
+    viewIds.map((viewId) => [viewId, views?.[viewId] ?? emptyLayoutConfig()]),
+  ) as Record<string, LayoutConfig>;
+}
 
 function applyPositions(
   graph: GraphData,
@@ -120,21 +142,33 @@ export default function App() {
   const [deviceGroups, setDeviceGroups] = useState<Record<string, string[]>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FiltersState>(defaultFilters);
-  const [viewport, setViewport] = useState<ViewportState>({ x: 0, y: 0, scale: 1 });
+  const [viewport, setViewport] = useState<ViewportState>(defaultViewport);
+  const [activeView, setActiveView] = useState<string>("view1");
+  const [isSwitchingView, setIsSwitchingView] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(() => window.innerWidth >= 900);
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveMessage, setSaveMessage] = useState("");
   const graphRef = useRef(graph);
-  const persistedPositionsRef = useRef<NodePositionMap>({});
+  const activeViewRef = useRef(activeView);
+  const viewportRef = useRef(viewport);
+  const viewConfigsRef = useRef<Record<string, LayoutConfig>>(normalizeViews());
+  const persistedViewConfigsRef = useRef<Record<string, LayoutConfig>>(normalizeViews());
   const persistedGroupsRef = useRef<Record<string, string[]>>({});
-  const persistedViewportRef = useRef<ViewportState>({ x: 0, y: 0, scale: 1 });
   const isDesktop = useIsDesktop();
 
   useEffect(() => {
     graphRef.current = graph;
   }, [graph]);
+
+  useEffect(() => {
+    activeViewRef.current = activeView;
+  }, [activeView]);
+
+  useEffect(() => {
+    viewportRef.current = viewport;
+  }, [viewport]);
 
   useEffect(() => {
     if (saveState !== "saved" && saveState !== "error") {
@@ -152,40 +186,67 @@ export default function App() {
     setSheetOpen(isDesktop);
   }, [isDesktop]);
 
+  const loadView = useCallback(async (viewId: string) => {
+    const status = await fetchStatus();
+    const nextGraph = buildGraphFromStatus(status);
+    const nextConfig = viewConfigsRef.current[viewId] ?? emptyLayoutConfig();
+
+    activeViewRef.current = viewId;
+    setActiveView(viewId);
+    setGraph(applyPositions(nextGraph, nextConfig.nodes));
+    setViewport(nextConfig.viewport ?? defaultViewport);
+    setError(status.error || null);
+  }, []);
+
   const refreshStatus = useCallback(async (keepPositions = true) => {
     const status = await fetchStatus();
     const nextGraph = buildGraphFromStatus(status);
+    const activeConfig = viewConfigsRef.current[activeViewRef.current] ?? emptyLayoutConfig();
 
     setGraph((current) => {
       return applyPositions(
         nextGraph,
-        persistedPositionsRef.current,
+        activeConfig.nodes,
         keepPositions ? current.nodes : undefined,
       );
     });
     setError(status.error || null);
   }, []);
 
+  const snapshotActiveView = useCallback(() => {
+    const currentViewId = activeViewRef.current;
+    viewConfigsRef.current = {
+      ...viewConfigsRef.current,
+      [currentViewId]: {
+        ...(viewConfigsRef.current[currentViewId] ?? emptyLayoutConfig()),
+        nodes: positionsFromNodes(graphRef.current.nodes),
+        viewport: viewportRef.current,
+      },
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrap() {
+      let nextActiveView = "view1";
       try {
         const [config, groups] = await Promise.all([fetchGraphConfig(), fetchDeviceGroups()]);
         if (cancelled) {
           return;
         }
-        persistedPositionsRef.current = config.nodes;
+        const nextViews = normalizeViews(config.views);
+        nextActiveView = viewIds.includes(config.activeView as (typeof viewIds)[number])
+          ? config.activeView
+          : "view1";
+        viewConfigsRef.current = nextViews;
+        persistedViewConfigsRef.current = nextViews;
         persistedGroupsRef.current = groups.groups || {};
         setDeviceGroups(groups.groups || {});
-        if (config.viewport) {
-          persistedViewportRef.current = config.viewport;
-          setViewport(config.viewport);
-        }
       } catch (caught) {
         console.error(caught);
       }
-      await refreshStatus(false);
+      await loadView(nextActiveView);
     }
 
     bootstrap().catch((caught: unknown) => {
@@ -197,7 +258,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [refreshStatus]);
+  }, [loadView]);
 
   useAutoRefresh(autoRefresh, async () => {
     await refreshStatus(true);
@@ -213,24 +274,27 @@ export default function App() {
   );
 
   const saveConfig = useCallback(async () => {
+    snapshotActiveView();
+    const currentViewId = activeViewRef.current;
+    const persistedConfig = persistedViewConfigsRef.current[currentViewId] ?? emptyLayoutConfig();
     const nextPositions = positionsFromNodes(graphRef.current.nodes);
-    const nextViewport = viewport;
+    const nextViewport = viewportRef.current;
     if (
-      positionsEqual(nextPositions, persistedPositionsRef.current) &&
-      viewportEqual(nextViewport, persistedViewportRef.current) &&
+      positionsEqual(nextPositions, persistedConfig.nodes) &&
+      viewportEqual(nextViewport, persistedConfig.viewport ?? defaultViewport) &&
       groupsEqual(deviceGroups, persistedGroupsRef.current)
     ) {
       setSaveState("saved");
-      setSaveMessage("Layout and groups already saved");
+      setSaveMessage(`View ${currentViewId.slice(-1)} and groups already saved`);
       return;
     }
 
     setSaveState("saving");
-    setSaveMessage("Saving layout and groups");
+    setSaveMessage(`Saving view ${currentViewId.slice(-1)} and groups`);
 
     try {
       const [configResult, groupsResult] = await Promise.all([
-        saveGraphConfig(nextPositions, nextViewport),
+        saveGraphConfig(nextPositions, nextViewport, currentViewId),
         saveDeviceGroups(deviceGroups),
       ]);
       if (!configResult.ok || !groupsResult.ok) {
@@ -239,18 +303,19 @@ export default function App() {
         return;
       }
 
-      persistedPositionsRef.current = nextPositions;
+      const savedViews = normalizeViews(configResult.config.views);
+      viewConfigsRef.current = savedViews;
+      persistedViewConfigsRef.current = savedViews;
       persistedGroupsRef.current = groupsResult.groups.groups;
-      persistedViewportRef.current = nextViewport;
       await refreshStatus(true);
       setSaveState("saved");
-      setSaveMessage("Layout and groups saved");
+      setSaveMessage(`View ${currentViewId.slice(-1)} and groups saved`);
     } catch (caught) {
       console.error(caught);
       setSaveState("error");
       setSaveMessage("Save failed");
     }
-  }, [deviceGroups, refreshStatus, viewport]);
+  }, [deviceGroups, refreshStatus, snapshotActiveView]);
 
   useEffect(() => {
     setGraph((current) => ({
@@ -266,9 +331,10 @@ export default function App() {
   const currentPositions = useMemo(() => positionsFromNodes(graph.nodes), [graph.nodes]);
 
   useEffect(() => {
+    const persistedConfig = persistedViewConfigsRef.current[activeView] ?? emptyLayoutConfig();
     if (
-      positionsEqual(currentPositions, persistedPositionsRef.current) &&
-      viewportEqual(viewport, persistedViewportRef.current) &&
+      positionsEqual(currentPositions, persistedConfig.nodes) &&
+      viewportEqual(viewport, persistedConfig.viewport ?? defaultViewport) &&
       groupsEqual(deviceGroups, persistedGroupsRef.current)
     ) {
       if (saveState !== "saving" && saveState !== "saved") {
@@ -284,31 +350,59 @@ export default function App() {
 
   return (
     <div id="app">
-      <CanvasGraph
-        graph={graph}
-        filters={filters}
-        selectedId={selectedId}
-        viewport={viewport}
-        onViewportChange={setViewport}
-        onSelect={setSelectedId}
-        onDragNode={(nodeId, x, y) => {
-          setGraph((current) => ({
-            ...current,
-            nodes: current.nodes.map((node) =>
-              node.id === nodeId ? { ...node, x, y, vx: 0, vy: 0 } : node,
-            ),
-          }));
-        }}
-        onDragStateChange={() => {}}
-      />
+      <div className="graphStage">
+        <CanvasGraph
+          graph={isSwitchingView ? emptyGraph : graph}
+          filters={filters}
+          selectedId={selectedId}
+          viewport={viewport}
+          onViewportChange={setViewport}
+          onSelect={setSelectedId}
+          onDragNode={(nodeId, x, y) => {
+            setGraph((current) => ({
+              ...current,
+              nodes: current.nodes.map((node) =>
+                node.id === nodeId ? { ...node, x, y, vx: 0, vy: 0 } : node,
+              ),
+            }));
+          }}
+          onDragStateChange={() => {}}
+        />
+
+        {isSwitchingView ? (
+          <div className="viewLoadingOverlay" aria-hidden="true">
+            <span className="spinner viewLoadingSpinner" />
+          </div>
+        ) : null}
+      </div>
 
       <TopBar
         generatedAt={error ? "error" : graph.generatedAt}
         autoRefresh={autoRefresh}
+        activeView={activeView}
+        isSwitchingView={isSwitchingView}
         saveState={saveState}
         saveMessage={saveMessage}
         onSaveConfig={() => {
           void saveConfig();
+        }}
+        onSelectView={(viewId) => {
+          if (viewId === activeViewRef.current) {
+            return;
+          }
+
+          snapshotActiveView();
+          setSaveState("idle");
+          setSaveMessage("");
+          setIsSwitchingView(true);
+          void loadView(viewId)
+            .catch((caught) => {
+              console.error(caught);
+              setError(caught instanceof Error ? caught.message : "unknown error");
+            })
+            .finally(() => {
+              setIsSwitchingView(false);
+            });
         }}
         onToggleRefresh={() => setAutoRefresh((current) => !current)}
       />
@@ -384,6 +478,19 @@ export default function App() {
           });
         }}
       />
+
+      {isDesktop ? (
+        <RightSidebar
+          onOrderByGroups={() => {
+            setGraph((current) => ({
+              ...current,
+              nodes: orderNodesByGroups(current.nodes),
+            }));
+            setSaveState("idle");
+            setSaveMessage("");
+          }}
+        />
+      ) : null}
     </div>
   );
 }

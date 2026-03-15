@@ -40,6 +40,12 @@ select {
   inset: 0;
 }
 
+.graphStage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
 #canvas {
   width: 100%;
   height: 100%;
@@ -48,6 +54,21 @@ select {
   background:
     radial-gradient(circle at center, rgba(255, 255, 255, 0.03), transparent 35%),
     linear-gradient(180deg, #0a1020, #0b1020);
+}
+
+.viewLoadingOverlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  z-index: 1;
+}
+
+.viewLoadingSpinner {
+  width: 26px;
+  height: 26px;
+  border-width: 3px;
 }
 
 .topbar {
@@ -70,6 +91,10 @@ select {
   gap: 8px;
   flex-wrap: wrap;
   pointer-events: auto;
+}
+
+.toolbar {
+  justify-content: flex-end;
 }
 
 .chip,
@@ -109,6 +134,17 @@ select {
 
 .toolbarbtn.active {
   outline: 2px solid rgba(255, 255, 255, 0.18);
+}
+
+.viewtabs {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.viewtab {
+  min-width: 68px;
+  justify-content: center;
 }
 
 .spinner {
@@ -166,6 +202,37 @@ select {
   overflow: auto;
   max-height: calc(68vh - 30px);
   padding-bottom: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.18s ease;
+}
+
+.sheetContent:hover,
+.sheetContent:focus-within,
+.sheetContent:active {
+  scrollbar-color: rgba(154, 166, 199, 0.65) transparent;
+}
+
+.sheetContent::-webkit-scrollbar {
+  width: 10px;
+}
+
+.sheetContent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sheetContent::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.18s ease;
+}
+
+.sheetContent:hover::-webkit-scrollbar-thumb,
+.sheetContent:focus-within::-webkit-scrollbar-thumb,
+.sheetContent:active::-webkit-scrollbar-thumb {
+  background-color: rgba(154, 166, 199, 0.65);
 }
 
 #controls,
@@ -203,8 +270,26 @@ select {
   letter-spacing: 0.08em;
 }
 
+.controlLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .sectionTitle {
   margin: 12px 0 8px;
+}
+
+.filterClearButton {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+  font-size: 11px;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .item {
@@ -237,6 +322,17 @@ select {
   margin: 4px 6px 0 0;
 }
 
+.badgeButton {
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+}
+
+.badgeButton.active {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: var(--accent);
+}
+
 .service-link {
   color: inherit;
   text-decoration: none;
@@ -261,9 +357,11 @@ select {
 }
 
 .groupEditor {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   margin-bottom: 8px;
+  align-items: center;
 }
 
 .groupInput {
@@ -287,6 +385,8 @@ select {
   color: var(--text);
   border-radius: 12px;
   padding: 10px 12px;
+  flex: 0 0 auto;
+  max-width: 100%;
 }
 
 #details {
@@ -302,7 +402,32 @@ select {
   z-index: 25;
   display: none;
   max-height: 58vh;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#actionSidebar {
+  display: none;
+}
+
+.sidebarCard {
+  background: rgba(10, 16, 32, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px;
+  backdrop-filter: blur(8px);
+}
+
+.sidebarActionButton {
+  width: 100%;
+  margin: 0;
+  border: 1px solid var(--line);
+  background: #0d1430;
+  color: var(--text);
+  border-radius: 14px;
+  padding: 12px 14px;
+  cursor: pointer;
+  text-align: left;
 }
 
 #details.show {
@@ -313,6 +438,24 @@ select {
   margin: 0 0 8px;
   font-size: 17px;
   padding-right: 38px;
+}
+
+.detailsExpandButton {
+  width: auto;
+  margin-top: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  border-radius: 0;
+  padding: 2px 0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.detailsExtra {
+  margin-top: 10px;
 }
 
 .kv {
@@ -361,6 +504,15 @@ select {
     max-height: calc(100vh - 120px);
   }
 
+  #actionSidebar {
+    position: fixed;
+    top: 84px;
+    right: 16px;
+    width: 320px;
+    display: block;
+    z-index: 24;
+  }
+
   .handleWrap {
     cursor: default;
   }
@@ -371,8 +523,9 @@ select {
 
   #details {
     left: auto;
-    width: 430px;
+    width: 320px;
     right: 16px;
     bottom: 16px;
+    max-height: calc(100vh - 320px);
   }
 }

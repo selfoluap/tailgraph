@@ -87,13 +87,19 @@ def test_config_json_round_trip(tmp_path):
     )
 
     saved = route_endpoint(router, "/config.json", method="PUT")(
-        {"nodes": {"peer1": {"x": 12, "y": -8.5}}, "viewport": {"x": 5, "y": 7, "scale": 1.25}}
+        {
+            "viewId": "view2",
+            "nodes": {"peer1": {"x": 12, "y": -8.5}},
+            "viewport": {"x": 5, "y": 7, "scale": 1.25},
+        }
     )
     loaded = route_endpoint(router, "/config.json", method="GET")()
 
     assert saved["ok"] is True
+    assert saved["config"]["activeView"] == "view2"
     assert saved["config"]["nodes"] == {"peer1": {"x": 12.0, "y": -8.5}}
     assert saved["config"]["viewport"] == {"x": 5.0, "y": 7.0, "scale": 1.25}
+    assert saved["config"]["views"]["view2"]["nodes"] == {"peer1": {"x": 12.0, "y": -8.5}}
     assert isinstance(saved["config"]["updatedAt"], int)
     assert loaded == saved["config"]
 

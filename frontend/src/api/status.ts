@@ -3,6 +3,17 @@ import type { TailscaleStatus } from "../types/tailscale";
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/$/, "");
 
+export interface LayoutConfig {
+  nodes: NodePositionMap;
+  viewport: { x: number; y: number; scale: number } | null;
+  updatedAt: number | null;
+}
+
+export interface LayoutConfigResponse extends LayoutConfig {
+  activeView: string;
+  views: Record<string, LayoutConfig>;
+}
+
 export async function fetchStatus(): Promise<TailscaleStatus> {
   const response = await fetch(`${apiBaseUrl}/status.json?ts=${Date.now()}`, {
     cache: "no-store",
@@ -13,39 +24,32 @@ export async function fetchStatus(): Promise<TailscaleStatus> {
   return response.json() as Promise<TailscaleStatus>;
 }
 
-export async function fetchGraphConfig(): Promise<{
-  nodes: NodePositionMap;
-  viewport: { x: number; y: number; scale: number } | null;
-  updatedAt: number | null;
-}> {
+export async function fetchGraphConfig(): Promise<LayoutConfigResponse> {
   const response = await fetch(`${apiBaseUrl}/config.json`, {
     cache: "no-store",
   });
   if (!response.ok) {
     throw new Error(`config request failed: ${response.status}`);
   }
-  return response.json() as Promise<{
-    nodes: NodePositionMap;
-    viewport: { x: number; y: number; scale: number } | null;
-    updatedAt: number | null;
-  }>;
+  return response.json() as Promise<LayoutConfigResponse>;
 }
 
 export async function saveGraphConfig(
   nodes: NodePositionMap,
   viewport: { x: number; y: number; scale: number },
-): Promise<{ ok: boolean }> {
+  viewId: string,
+): Promise<{ ok: boolean; config: LayoutConfigResponse }> {
   const response = await fetch(`${apiBaseUrl}/config.json`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ nodes, viewport }),
+    body: JSON.stringify({ viewId, nodes, viewport }),
   });
   if (!response.ok) {
     throw new Error(`config save failed: ${response.status}`);
   }
-  return response.json() as Promise<{ ok: boolean }>;
+  return response.json() as Promise<{ ok: boolean; config: LayoutConfigResponse }>;
 }
 
 export async function fetchDeviceGroups(): Promise<{

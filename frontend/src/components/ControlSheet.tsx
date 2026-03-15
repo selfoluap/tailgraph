@@ -19,6 +19,10 @@ interface ControlSheetProps {
   onSetSheetOpen: (open: boolean) => void;
 }
 
+function toggleFilterValue(current: string, next: string): string {
+  return current === next ? "all" : next;
+}
+
 export function ControlSheet({
   filters,
   groups,
@@ -201,7 +205,18 @@ export function ControlSheet({
               </select>
             </div>
             <div className="controlGroup">
-              <div className="controlLabel">Groups</div>
+              <div className="controlLabel controlLabelRow">
+                <span>Groups</span>
+                {filters.group !== "all" ? (
+                  <button
+                    className="filterClearButton"
+                    onClick={() => onChange({ group: "all" })}
+                    type="button"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
               <select
                 id="groupFilter"
                 value={filters.group}
@@ -216,7 +231,18 @@ export function ControlSheet({
               </select>
             </div>
             <div className="controlGroup">
-              <div className="controlLabel">Tailscale Tags</div>
+              <div className="controlLabel controlLabelRow">
+                <span>Tailscale Tags</span>
+                {filters.tag !== "all" ? (
+                  <button
+                    className="filterClearButton"
+                    onClick={() => onChange({ tag: "all" })}
+                    type="button"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
               <select
                 id="tagFilter"
                 value={filters.tag}
@@ -256,16 +282,32 @@ export function ControlSheet({
               </div>
               <div>
                 {node.groups.slice(0, 3).map((group) => (
-                  <span className="badge group" key={group}>
+                  <button
+                    className={`badge group badgeButton ${filters.group === group ? "active" : ""}`}
+                    key={group}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onChange({ group: toggleFilterValue(filters.group, group) });
+                    }}
+                    type="button"
+                  >
                     {group}
-                  </span>
+                  </button>
                 ))}
                 {(node.exitNode || node.exitNodeOption) && <span className="badge exit">EXIT</span>}
                 {node.subnetRouter && <span className="badge router">ROUTE</span>}
                 {node.tags.slice(0, 4).map((tag) => (
-                  <span className="badge" key={tag}>
+                  <button
+                    className={`badge badgeButton ${filters.tag === tag ? "active" : ""}`}
+                    key={tag}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onChange({ tag: toggleFilterValue(filters.tag, tag) });
+                    }}
+                    type="button"
+                  >
                     {tag}
-                  </span>
+                  </button>
                 ))}
               </div>
             </button>
