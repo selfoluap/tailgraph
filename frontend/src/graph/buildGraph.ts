@@ -1,5 +1,5 @@
 import type { GraphData, GraphEdge, GraphNode } from "../types/graph";
-import type { TailscalePeer, TailscaleStatus } from "../types/tailscale";
+import type { TailscaleDiscoveredService, TailscalePeer, TailscaleStatus } from "../types/tailscale";
 
 function dnsShort(peer: TailscalePeer): string {
   const dns = (peer.DNSName || "").replace(/\.$/, "");
@@ -31,12 +31,23 @@ function normalizeNode(raw: {
   exitNode?: boolean;
   exitNodeOption?: boolean;
   subnetRouter?: boolean;
+  services?: TailscaleDiscoveredService[];
+  servicesScannedAt?: string;
+  servicesStatus?: string;
+  servicesError?: string;
 }, role: "self" | "peer", fallbackId: string): GraphNode {
   const tags = raw.tags || [];
   const routes = raw.routes || [];
   const dns = (raw.dns || "").replace(/\.$/, "");
   const hostname = raw.hostname || "";
   const ip = raw.ip || "";
+  const services = (raw.services || [])
+    .filter((service): service is TailscaleDiscoveredService => typeof service?.port === "number")
+    .map((service) => ({
+      label: service.label || (service.port ? `tcp/${service.port}` : "unknown"),
+      port: service.port || 0,
+      protocol: service.protocol || "tcp",
+    }));
 
   return {
     id: String(raw.id ?? fallbackId),
@@ -56,6 +67,10 @@ function normalizeNode(raw: {
     exitNode: Boolean(raw.exitNode),
     exitNodeOption: Boolean(raw.exitNodeOption),
     subnetRouter: routes.length > 0 || Boolean(raw.subnetRouter),
+    services,
+    servicesScannedAt: raw.servicesScannedAt || "",
+    servicesStatus: raw.servicesStatus || "unknown",
+    servicesError: raw.servicesError || "",
     role,
     x: (Math.random() - 0.5) * 500,
     y: (Math.random() - 0.5) * 500,
@@ -69,6 +84,7 @@ export function buildGraphFromStatus(status: TailscaleStatus): GraphData {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const selfRaw = status.Self || {};
+  const serviceDiscoveryMeta = status._meta?.serviceDiscovery;
 
   const self = normalizeNode(
     {
@@ -89,6 +105,10 @@ export function buildGraphFromStatus(status: TailscaleStatus): GraphData {
       exitNode: Boolean(selfRaw.ExitNode),
       exitNodeOption: Boolean(selfRaw.ExitNodeOption),
       subnetRouter: Boolean((selfRaw.PrimaryRoutes || selfRaw.AllowedIPs || []).length),
+      services: selfRaw.DiscoveredServices || [],
+      servicesScannedAt: serviceDiscoveryMeta?.scannedAt || "",
+      servicesStatus: serviceDiscoveryMeta?.status || "unknown",
+      servicesError: serviceDiscoveryMeta?.error || "",
     },
     "self",
     "self",
@@ -119,6 +139,10 @@ export function buildGraphFromStatus(status: TailscaleStatus): GraphData {
         exitNode: Boolean(peerRaw.ExitNode),
         exitNodeOption: Boolean(peerRaw.ExitNodeOption),
         subnetRouter: Boolean((peerRaw.PrimaryRoutes || peerRaw.AllowedIPs || []).length),
+        services: peerRaw.DiscoveredServices || [],
+        servicesScannedAt: serviceDiscoveryMeta?.scannedAt || "",
+        servicesStatus: serviceDiscoveryMeta?.status || "unknown",
+        servicesError: serviceDiscoveryMeta?.error || "",
       },
       "peer",
       peerId,

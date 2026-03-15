@@ -11,6 +11,7 @@ describe("buildGraphFromStatus", () => {
       },
       Peer: {
         peer1: {
+          DiscoveredServices: [{ label: "fastapi", port: 8000, protocol: "tcp" }],
           DNSName: "beta.tail.ts.net.",
           LastHandshake: "2026-03-13T23:50:00Z",
           LastSeen: "2026-03-13T23:30:00Z",
@@ -22,6 +23,10 @@ describe("buildGraphFromStatus", () => {
       },
       _meta: {
         generatedAtISO: "2026-03-14T00:00:00Z",
+        serviceDiscovery: {
+          scannedAt: "2026-03-14T00:00:10Z",
+          status: "ready",
+        },
       },
     });
 
@@ -32,6 +37,8 @@ describe("buildGraphFromStatus", () => {
     expect(graph.nodes[1]?.lastHandshake).toBe("2026-03-13T23:50:00Z");
     expect(graph.nodes[1]?.lastSeen).toBe("2026-03-13T23:30:00Z");
     expect(graph.nodes[1]?.lastWrite).toBe("2026-03-13T23:55:00Z");
+    expect(graph.nodes[1]?.services).toEqual([{ label: "fastapi", port: 8000, protocol: "tcp" }]);
+    expect(graph.nodes[1]?.servicesScannedAt).toBe("2026-03-14T00:00:10Z");
     expect(statusText(graph.nodes[1])).toBe("online");
   });
 });

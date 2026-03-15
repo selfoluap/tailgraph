@@ -1,6 +1,7 @@
 export interface TailscalePeer {
   Active?: boolean;
   AllowedIPs?: string[];
+  DiscoveredServices?: TailscaleDiscoveredService[];
   DNSName?: string;
   ExitNode?: boolean;
   ExitNodeOption?: boolean;
@@ -16,10 +17,29 @@ export interface TailscalePeer {
   TailscaleIPs?: string[];
 }
 
+export interface TailscaleDiscoveredService {
+  label?: string;
+  port?: number;
+  protocol?: string;
+}
+
+export interface TailscaleServiceDiscoveryMeta {
+  durationMs?: number;
+  enabled?: boolean;
+  error?: string;
+  ports?: number[];
+  scannedAt?: string;
+  skippedNodes?: string[];
+  status?: string;
+  stale?: boolean;
+  timeoutMs?: number;
+}
+
 export interface TailscaleStatusMeta {
   generatedAt?: number;
   generatedAtISO?: string;
   serverHost?: string;
+  serviceDiscovery?: TailscaleServiceDiscoveryMeta;
 }
 
 export interface TailscaleStatus {

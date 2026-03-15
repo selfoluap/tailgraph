@@ -25,6 +25,10 @@ function makeNode(overrides: Partial<GraphNode> = {}): GraphNode {
     exitNode: false,
     exitNodeOption: false,
     subnetRouter: false,
+    services: [{ label: "fastapi", port: 8000, protocol: "tcp" }],
+    servicesScannedAt: "2026-03-14T11:58:00Z",
+    servicesStatus: "ready",
+    servicesError: "",
     role: "peer",
     x: 0,
     y: 0,
@@ -47,6 +51,7 @@ describe("DetailsPanel", () => {
     expect(screen.getByText("1m ago")).toBeInTheDocument();
     expect(screen.getByText("just now")).toBeInTheDocument();
     expect(screen.getByText("3m ago")).toBeInTheDocument();
+    expect(screen.getByText("2m ago")).toBeInTheDocument();
   });
 
   it("renders n/a for missing timestamps", () => {
@@ -94,5 +99,26 @@ describe("DetailsPanel", () => {
     );
 
     expect(screen.getAllByText("n/a")).toHaveLength(3);
+  });
+
+  it("renders discovered services and fallback empty state", () => {
+    const { rerender } = render(
+      React.createElement(DetailsPanel, { node: makeNode(), onClose: () => {} }),
+    );
+
+    expect(screen.getByText("fastapi 8000/tcp")).toBeInTheDocument();
+
+    rerender(
+      React.createElement(DetailsPanel, {
+        node: makeNode({
+          services: [],
+          servicesScannedAt: "",
+          servicesStatus: "ready",
+        }),
+        onClose: () => {},
+      }),
+    );
+
+    expect(screen.getByText("no configured service ports reachable")).toBeInTheDocument();
   });
 });

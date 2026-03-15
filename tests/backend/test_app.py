@@ -5,7 +5,8 @@ from fastapi.responses import HTMLResponse
 
 from backend.api.routes import build_api_router
 from backend.app import create_app
-from backend.services.cache import StatusCache
+from backend.services.cache import BackgroundRefreshCache, StatusCache
+from backend.services.service_discovery import ServiceScanner
 from backend.services.tailscale import TailscaleService
 
 
@@ -24,7 +25,12 @@ def app_endpoint(app, path: str):
 
 
 def test_healthz():
-    router = build_api_router(StatusCache(), TailscaleService())
+    router = build_api_router(
+        StatusCache(),
+        BackgroundRefreshCache(ttl_seconds=60),
+        TailscaleService(),
+        ServiceScanner(enabled=False),
+    )
 
     payload = route_endpoint(router, "/healthz")()
 
@@ -34,26 +40,32 @@ def test_healthz():
 
 def test_status_json_success():
     cache = StatusCache()
+    service_discovery_cache = BackgroundRefreshCache(ttl_seconds=60)
     tailscale = TailscaleService()
+    service_scanner = ServiceScanner(enabled=False)
     tailscale.fetch_status = lambda: {"Self": {}, "_meta": {"generatedAtISO": "now"}}  # type: ignore[method-assign]
-    router = build_api_router(cache, tailscale)
+    router = build_api_router(cache, service_discovery_cache, tailscale, service_scanner)
     response = Response()
 
     payload = route_endpoint(router, "/status.json")(response)
 
     assert response.status_code == 200
     assert payload["_meta"]["generatedAtISO"] == "now"
+    assert payload["_meta"]["serviceDiscovery"]["status"] == "disabled"
+    assert payload["Self"]["DiscoveredServices"] == []
 
 
 def test_status_json_error():
     cache = StatusCache()
+    service_discovery_cache = BackgroundRefreshCache(ttl_seconds=60)
     tailscale = TailscaleService()
+    service_scanner = ServiceScanner(enabled=False)
 
     def fail():
         raise RuntimeError("boom")
 
     tailscale.fetch_status = fail  # type: ignore[method-assign]
-    router = build_api_router(cache, tailscale)
+    router = build_api_router(cache, service_discovery_cache, tailscale, service_scanner)
     response = Response()
 
     payload = route_endpoint(router, "/status.json")(response)

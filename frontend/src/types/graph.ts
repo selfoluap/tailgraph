@@ -1,3 +1,9 @@
+export interface GraphService {
+  label: string;
+  port: number;
+  protocol: string;
+}
+
 export interface GraphNode {
   id: string;
   name: string;
@@ -16,6 +22,10 @@ export interface GraphNode {
   exitNode: boolean;
   exitNodeOption: boolean;
   subnetRouter: boolean;
+  services: GraphService[];
+  servicesScannedAt: string;
+  servicesStatus: string;
+  servicesError: string;
   role: "self" | "peer";
   x: number;
   y: number;

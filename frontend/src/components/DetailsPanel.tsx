@@ -44,11 +44,45 @@ export function DetailsPanel({ node, onClose }: DetailsPanelProps) {
                 <span className="badge">none</span>
               )}
             </div>
+            <div className="k">Services</div>
+            <div>
+              {node.services.length > 0 ? (
+                node.services.map((service) => (
+                  <span className="badge" key={`${service.protocol}-${service.port}`}>
+                    {service.label} {service.port}/{service.protocol}
+                  </span>
+                ))
+              ) : (
+                <span>{serviceEmptyState(node)}</span>
+              )}
+            </div>
+            <div className="k">Service scan</div>
+            <div>{formatServiceScan(node)}</div>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+function serviceEmptyState(node: GraphNode): string {
+  if (node.servicesError) {
+    return "service discovery error";
+  }
+  if (node.servicesStatus === "disabled") {
+    return "service discovery disabled";
+  }
+  return "no configured service ports reachable";
+}
+
+function formatServiceScan(node: GraphNode): string {
+  if (node.servicesError) {
+    return node.servicesError;
+  }
+  if (!node.servicesScannedAt) {
+    return node.servicesStatus === "disabled" ? "disabled" : "n/a";
+  }
+  return formatAbsoluteOrRelativeTime(node.servicesScannedAt);
 }
 
 type NodeTimestampField = "lastHandshake" | "lastSeen" | "lastWrite";
@@ -59,6 +93,13 @@ export function formatNodeTimestamp(node: GraphNode, field: NodeTimestampField):
   }
 
   const value = node[field];
+  return formatAbsoluteOrRelativeTime(value, field === "lastSeen" && node.role === "self");
+}
+
+function formatAbsoluteOrRelativeTime(value: string, forceCurrentNode = false): string {
+  if (forceCurrentNode) {
+    return "current node";
+  }
   if (!value) {
     return "n/a";
   }
