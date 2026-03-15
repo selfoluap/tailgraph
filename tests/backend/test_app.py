@@ -1,33 +1,24 @@
-from pathlib import Path
-
 from fastapi import Response
-from fastapi.responses import HTMLResponse
 
 from backend.api.routes import build_api_router
-from backend.app import create_app
 from backend.services.cache import BackgroundRefreshCache, StatusCache
+from backend.services.layout_store import LayoutStore
 from backend.services.service_discovery import ServiceScanner
 from backend.services.tailscale import TailscaleService
 
 
-def route_endpoint(router, path: str):
+def route_endpoint(router, path: str, method: str = "GET"):
     for route in router.routes:
-        if route.path == path:
+        if route.path == path and method in route.methods:
             return route.endpoint
-    raise AssertionError(f"route not found: {path}")
-
-
-def app_endpoint(app, path: str):
-    for route in app.routes:
-        if getattr(route, "path", None) == path:
-            return route.endpoint
-    raise AssertionError(f"app route not found: {path}")
+    raise AssertionError(f"route not found: {method} {path}")
 
 
 def test_healthz():
     router = build_api_router(
         StatusCache(),
         BackgroundRefreshCache(ttl_seconds=60),
+        LayoutStore("/tmp/test-config-healthz.json"),
         TailscaleService(),
         ServiceScanner(enabled=False),
     )
@@ -41,10 +32,11 @@ def test_healthz():
 def test_status_json_success():
     cache = StatusCache()
     service_discovery_cache = BackgroundRefreshCache(ttl_seconds=60)
+    layout_store = LayoutStore("/tmp/test-config-status-success.json")
     tailscale = TailscaleService()
     service_scanner = ServiceScanner(enabled=False)
     tailscale.fetch_status = lambda: {"Self": {}, "_meta": {"generatedAtISO": "now"}}  # type: ignore[method-assign]
-    router = build_api_router(cache, service_discovery_cache, tailscale, service_scanner)
+    router = build_api_router(cache, service_discovery_cache, layout_store, tailscale, service_scanner)
     response = Response()
 
     payload = route_endpoint(router, "/status.json")(response)
@@ -58,6 +50,7 @@ def test_status_json_success():
 def test_status_json_error():
     cache = StatusCache()
     service_discovery_cache = BackgroundRefreshCache(ttl_seconds=60)
+    layout_store = LayoutStore("/tmp/test-config-status-error.json")
     tailscale = TailscaleService()
     service_scanner = ServiceScanner(enabled=False)
 
@@ -65,7 +58,7 @@ def test_status_json_error():
         raise RuntimeError("boom")
 
     tailscale.fetch_status = fail  # type: ignore[method-assign]
-    router = build_api_router(cache, service_discovery_cache, tailscale, service_scanner)
+    router = build_api_router(cache, service_discovery_cache, layout_store, tailscale, service_scanner)
     response = Response()
 
     payload = route_endpoint(router, "/status.json")(response)
@@ -74,12 +67,22 @@ def test_status_json_error():
     assert payload["error"] == "boom"
 
 
-def test_frontend_fallback(monkeypatch, tmp_path: Path):
-    monkeypatch.setenv("TS_GRAPH_FRONTEND_DIST", str(tmp_path))
-    app = create_app()
+def test_config_json_round_trip(tmp_path):
+    router = build_api_router(
+        StatusCache(),
+        BackgroundRefreshCache(ttl_seconds=60),
+        LayoutStore(str(tmp_path / "config.json")),
+        TailscaleService(),
+        ServiceScanner(enabled=False),
+    )
 
-    response = app_endpoint(app, "/{full_path:path}")("")
+    saved = route_endpoint(router, "/config.json", method="PUT")(
+        {"nodes": {"peer1": {"x": 12, "y": -8.5}}, "viewport": {"x": 5, "y": 7, "scale": 1.25}}
+    )
+    loaded = route_endpoint(router, "/config.json", method="GET")()
 
-    assert isinstance(response, HTMLResponse)
-    assert response.status_code == 503
-    assert b"Frontend build not found" in response.body
+    assert saved["ok"] is True
+    assert saved["config"]["nodes"] == {"peer1": {"x": 12.0, "y": -8.5}}
+    assert saved["config"]["viewport"] == {"x": 5.0, "y": 7.0, "scale": 1.25}
+    assert isinstance(saved["config"]["updatedAt"], int)
+    assert loaded == saved["config"]

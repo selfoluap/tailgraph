@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchStatus } from "./api/status";
+import { fetchGraphConfig, fetchStatus, saveGraphConfig } from "./api/status";
 import { CanvasGraph } from "./components/CanvasGraph";
 import { ControlSheet } from "./components/ControlSheet";
 import { DetailsPanel } from "./components/DetailsPanel";
 import { TopBar } from "./components/TopBar";
 import { buildGraphFromStatus } from "./graph/buildGraph";
 import { filterNodes } from "./graph/filterNodes";
-import { stepGraph } from "./graph/simulation";
 import { useAutoRefresh } from "./hooks/useAutoRefresh";
-import type { FiltersState, GraphData, ViewportState } from "./types/graph";
+import type { FiltersState, GraphData, GraphNode, NodePositionMap, ViewportState } from "./types/graph";
 
 const defaultFilters: FiltersState = {
   query: "",
@@ -24,6 +23,61 @@ const emptyGraph: GraphData = {
   edges: [],
   allTags: [],
 };
+
+function applyPositions(
+  graph: GraphData,
+  persistedPositions: NodePositionMap,
+  currentNodes?: GraphNode[],
+): GraphData {
+  const currentNodeMap = currentNodes ? new Map(currentNodes.map((node) => [node.id, node])) : null;
+
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => {
+      const current = currentNodeMap?.get(node.id);
+      if (current) {
+        return {
+          ...node,
+          x: current.x,
+          y: current.y,
+          vx: current.vx,
+          vy: current.vy,
+        };
+      }
+
+      const persisted = persistedPositions[node.id];
+      if (!persisted) {
+        return node;
+      }
+
+      return {
+        ...node,
+        x: persisted.x,
+        y: persisted.y,
+        vx: 0,
+        vy: 0,
+      };
+    }),
+  };
+}
+
+function positionsFromNodes(nodes: GraphNode[]): NodePositionMap {
+  return Object.fromEntries(nodes.map((node) => [node.id, { x: node.x, y: node.y }]));
+}
+
+function positionsEqual(a: NodePositionMap, b: NodePositionMap): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+
+  return aKeys.every((key) => a[key]?.x === b[key]?.x && a[key]?.y === b[key]?.y);
+}
+
+function viewportEqual(a: ViewportState, b: ViewportState): boolean {
+  return a.x === b.x && a.y === b.y && a.scale === b.scale;
+}
 
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 900);
@@ -42,17 +96,27 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FiltersState>(defaultFilters);
   const [viewport, setViewport] = useState<ViewportState>({ x: 0, y: 0, scale: 1 });
-  const [frozen, setFrozen] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(() => window.innerWidth >= 900);
   const [error, setError] = useState<string | null>(null);
-  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const graphRef = useRef(graph);
+  const persistedPositionsRef = useRef<NodePositionMap>({});
+  const persistedViewportRef = useRef<ViewportState>({ x: 0, y: 0, scale: 1 });
   const isDesktop = useIsDesktop();
 
   useEffect(() => {
     graphRef.current = graph;
   }, [graph]);
+
+  useEffect(() => {
+    if (saveState !== "saved") {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setSaveState("idle"), 1800);
+    return () => window.clearTimeout(timer);
+  }, [saveState]);
 
   useEffect(() => {
     setSheetOpen(isDesktop);
@@ -63,48 +127,49 @@ export default function App() {
     const nextGraph = buildGraphFromStatus(status);
 
     setGraph((current) => {
-      if (!keepPositions) {
-        return nextGraph;
-      }
-
-      const previous = new Map(current.nodes.map((node) => [node.id, node]));
-      return {
-        ...nextGraph,
-        nodes: nextGraph.nodes.map((node) => {
-          const old = previous.get(node.id);
-          return old
-            ? { ...node, x: old.x, y: old.y, vx: old.vx, vy: old.vy }
-            : node;
-        }),
-      };
+      return applyPositions(
+        nextGraph,
+        persistedPositionsRef.current,
+        keepPositions ? current.nodes : undefined,
+      );
     });
     setError(status.error || null);
   }, []);
 
   useEffect(() => {
-    refreshStatus(false).catch((caught: unknown) => {
-      setError(caught instanceof Error ? caught.message : "unknown error");
+    let cancelled = false;
+
+    async function bootstrap() {
+      try {
+        const config = await fetchGraphConfig();
+        if (cancelled) {
+          return;
+        }
+        persistedPositionsRef.current = config.nodes;
+        if (config.viewport) {
+          persistedViewportRef.current = config.viewport;
+          setViewport(config.viewport);
+        }
+      } catch (caught) {
+        console.error(caught);
+      }
+      await refreshStatus(false);
+    }
+
+    bootstrap().catch((caught: unknown) => {
+      if (!cancelled) {
+        setError(caught instanceof Error ? caught.message : "unknown error");
+      }
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [refreshStatus]);
 
   useAutoRefresh(autoRefresh, async () => {
     await refreshStatus(true);
   });
-
-  useEffect(() => {
-    let frame = 0;
-    const tick = () => {
-      if (!frozen) {
-        setGraph((current) => ({
-          ...current,
-          nodes: stepGraph(current.nodes, current.edges, draggingNodeId),
-        }));
-      }
-      frame = window.requestAnimationFrame(tick);
-    };
-    frame = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(frame);
-  }, [draggingNodeId, frozen]);
 
   const selectedNode = graph.nodes.find((node) => node.id === selectedId) || null;
   const filteredPeers = useMemo(
@@ -115,14 +180,51 @@ export default function App() {
     [filters, graph.nodes],
   );
 
-  const recenter = useCallback(() => {
-    const selfNode = graphRef.current.nodes.find((node) => node.role === "self");
-    setViewport({
-      x: selfNode ? -selfNode.x : 0,
-      y: selfNode ? -selfNode.y : 0,
-      scale: 1,
-    });
-  }, []);
+  const saveConfig = useCallback(async () => {
+    const nextPositions = positionsFromNodes(graphRef.current.nodes);
+    const nextViewport = viewport;
+    if (
+      positionsEqual(nextPositions, persistedPositionsRef.current) &&
+      viewportEqual(nextViewport, persistedViewportRef.current)
+    ) {
+      setSaveState("saved");
+      return;
+    }
+
+    setSaveState("saving");
+
+    try {
+      const result = await saveGraphConfig(nextPositions, nextViewport);
+      if (!result.ok) {
+        setSaveState("error");
+        return;
+      }
+      persistedPositionsRef.current = nextPositions;
+      persistedViewportRef.current = nextViewport;
+      setSaveState("saved");
+    } catch (caught) {
+      console.error(caught);
+      setSaveState("error");
+    }
+  }, [viewport]);
+
+  const currentPositions = useMemo(() => positionsFromNodes(graph.nodes), [graph.nodes]);
+
+  useEffect(() => {
+    if (
+      positionsEqual(currentPositions, persistedPositionsRef.current) &&
+      viewportEqual(viewport, persistedViewportRef.current)
+    ) {
+      if (saveState !== "saving" && saveState !== "saved") {
+        setSaveState("idle");
+      }
+      return;
+    }
+
+    if (saveState !== "saving") {
+      setSaveState("idle");
+    }
+  }, [currentPositions, saveState, viewport]);
 
   return (
     <div id="app">
@@ -141,15 +243,16 @@ export default function App() {
             ),
           }));
         }}
-        onDragStateChange={setDraggingNodeId}
+        onDragStateChange={() => {}}
       />
 
       <TopBar
         generatedAt={error ? "error" : graph.generatedAt}
-        frozen={frozen}
         autoRefresh={autoRefresh}
-        onRecenter={recenter}
-        onToggleFrozen={() => setFrozen((current) => !current)}
+        saveState={saveState}
+        onSaveConfig={() => {
+          void saveConfig();
+        }}
         onToggleRefresh={() => setAutoRefresh((current) => !current)}
       />
 

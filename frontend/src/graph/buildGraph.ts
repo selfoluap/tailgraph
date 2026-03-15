@@ -13,6 +13,19 @@ function isSpecial(node: GraphNode): boolean {
   return Boolean(node.exitNode || node.exitNodeOption || node.subnetRouter);
 }
 
+function applyDefaultLayout(peerNodes: GraphNode[]): void {
+  if (peerNodes.length === 0) {
+    return;
+  }
+
+  const radius = Math.max(180, 120 + peerNodes.length * 14);
+  peerNodes.forEach((node, index) => {
+    const angle = (-Math.PI / 2) + (index * Math.PI * 2) / peerNodes.length;
+    node.x = Math.cos(angle) * radius;
+    node.y = Math.sin(angle) * radius;
+  });
+}
+
 function normalizeNode(raw: {
   id?: string;
   name?: string;
@@ -72,8 +85,8 @@ function normalizeNode(raw: {
     servicesStatus: raw.servicesStatus || "unknown",
     servicesError: raw.servicesError || "",
     role,
-    x: (Math.random() - 0.5) * 500,
-    y: (Math.random() - 0.5) * 500,
+    x: 0,
+    y: 0,
     vx: 0,
     vy: 0,
     r: role === "self" ? 21 : 12,
@@ -160,6 +173,7 @@ export function buildGraphFromStatus(status: TailscaleStatus): GraphData {
     }
     return a.name.localeCompare(b.name);
   });
+  applyDefaultLayout(peerNodes);
 
   nodes.push(...peerNodes);
 

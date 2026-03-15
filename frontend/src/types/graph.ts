@@ -52,6 +52,13 @@ export interface ViewportState {
   scale: number;
 }
 
+export interface NodePosition {
+  x: number;
+  y: number;
+}
+
+export type NodePositionMap = Record<string, NodePosition>;
+
 export interface FiltersState {
   query: string;
   status: "all" | "online" | "offline" | "unknown";

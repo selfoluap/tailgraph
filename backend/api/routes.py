@@ -5,6 +5,7 @@ import time
 from fastapi import APIRouter, Response
 
 from backend.services.cache import BackgroundRefreshCache, StatusCache
+from backend.services.layout_store import LayoutStore
 from backend.services.service_discovery import ServiceScanner
 from backend.services.tailscale import TailscaleService
 
@@ -12,6 +13,7 @@ from backend.services.tailscale import TailscaleService
 def build_api_router(
     cache: StatusCache,
     service_discovery_cache: BackgroundRefreshCache,
+    layout_store: LayoutStore,
     tailscale: TailscaleService,
     service_scanner: ServiceScanner,
 ) -> APIRouter:
@@ -37,6 +39,17 @@ def build_api_router(
     @router.get("/healthz")
     def healthz() -> dict:
         return {"ok": True, "time": int(time.time())}
+
+    @router.get("/config.json")
+    def get_config() -> dict:
+        return layout_store.load()
+
+    @router.put("/config.json")
+    def put_config(payload: dict) -> dict:
+        return {
+            "ok": True,
+            "config": layout_store.save(payload.get("nodes") or {}, payload.get("viewport")),
+        }
 
     return router
 

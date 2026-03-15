@@ -5,9 +5,9 @@ from fastapi import FastAPI
 from backend.api.routes import build_api_router
 from backend.config import load_settings
 from backend.services.cache import BackgroundRefreshCache, StatusCache
+from backend.services.layout_store import LayoutStore
 from backend.services.service_discovery import ServiceScanner
 from backend.services.tailscale import TailscaleService
-from backend.web.routes import register_frontend
 
 
 def create_app() -> FastAPI:
@@ -16,6 +16,7 @@ def create_app() -> FastAPI:
     service_discovery_cache = BackgroundRefreshCache(
         ttl_seconds=settings.service_discovery_ttl_seconds
     )
+    layout_store = LayoutStore(settings.config_path)
     tailscale = TailscaleService(host_override=settings.tailscale_host)
     service_scanner = ServiceScanner(
         enabled=settings.service_discovery_enabled,
@@ -27,9 +28,17 @@ def create_app() -> FastAPI:
     app.state.settings = settings
     app.state.cache = cache
     app.state.service_discovery_cache = service_discovery_cache
+    app.state.layout_store = layout_store
     app.state.tailscale = tailscale
     app.state.service_scanner = service_scanner
 
-    app.include_router(build_api_router(cache, service_discovery_cache, tailscale, service_scanner))
-    register_frontend(app, settings.frontend_dist_dir)
+    app.include_router(
+        build_api_router(
+            cache,
+            service_discovery_cache,
+            layout_store,
+            tailscale,
+            service_scanner,
+        )
+    )
     return app

@@ -19,7 +19,6 @@ def main() -> int:
 
     print(f"Serving on http://{bind_host}:{settings.port}")
     print("Endpoints:")
-    print("  /            -> frontend app")
     print("  /status.json -> live tailscale status")
     print("  /healthz     -> health check")
     print("")
