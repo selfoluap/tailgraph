@@ -24,4 +24,34 @@ describe("fetchStatus", () => {
       { cache: "no-store" },
     );
   });
+
+  it("loads and saves groups on the dedicated endpoint", async () => {
+    import.meta.env.VITE_API_BASE_URL = "https://api.example.test/";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ groups: { beta: ["Production"] }, updatedAt: 123 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true, groups: { groups: { beta: ["Production"] }, updatedAt: 124 } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { fetchDeviceGroups, saveDeviceGroups } = await import("../../frontend/src/api/status");
+    await fetchDeviceGroups();
+    await saveDeviceGroups({ beta: ["Production"] });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "https://api.example.test/groups.json", {
+      cache: "no-store",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "https://api.example.test/groups.json", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ groups: { beta: ["Production"] } }),
+    });
+  });
 });

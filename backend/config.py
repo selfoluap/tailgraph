@@ -10,6 +10,7 @@ class Settings:
     port: int
     cache_seconds: float
     config_path: str
+    groups_path: str
     tailscale_host: str
     service_discovery_enabled: bool
     service_discovery_ttl_seconds: float
@@ -33,6 +34,7 @@ def load_settings() -> Settings:
         port=int(os.environ.get("TS_GRAPH_PORT", "8080")),
         cache_seconds=float(os.environ.get("TS_GRAPH_CACHE_SECONDS", "2.0")),
         config_path=os.environ.get("TS_GRAPH_CONFIG_PATH", ".tailgraph-config.json").strip(),
+        groups_path=os.environ.get("TS_GRAPH_GROUPS_PATH", ".tailgraph-groups.json").strip(),
         tailscale_host=os.environ.get("TS_GRAPH_HOST", "").strip(),
         service_discovery_enabled=_env_flag("TS_GRAPH_SERVICE_DISCOVERY_ENABLED", "true"),
         service_discovery_ttl_seconds=float(os.environ.get("TS_GRAPH_SERVICE_DISCOVERY_TTL_SECONDS", "60")),

@@ -27,6 +27,10 @@ export function filterNodes(nodes: GraphNode[], filters: FiltersState): GraphNod
       return false;
     }
 
+    if (filters.group !== "all" && !node.groups.includes(filters.group)) {
+      return false;
+    }
+
     if (filters.tag !== "all" && !node.tags.includes(filters.tag)) {
       return false;
     }
@@ -41,6 +45,7 @@ export function filterNodes(nodes: GraphNode[], filters: FiltersState): GraphNod
       node.dns,
       node.hostname,
       node.os,
+      ...node.groups,
       ...node.tags,
       ...node.routes,
     ]

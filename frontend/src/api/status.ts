@@ -47,3 +47,38 @@ export async function saveGraphConfig(
   }
   return response.json() as Promise<{ ok: boolean }>;
 }
+
+export async function fetchDeviceGroups(): Promise<{
+  groups: Record<string, string[]>;
+  updatedAt: number | null;
+}> {
+  const response = await fetch(`${apiBaseUrl}/groups.json`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`groups request failed: ${response.status}`);
+  }
+  return response.json() as Promise<{
+    groups: Record<string, string[]>;
+    updatedAt: number | null;
+  }>;
+}
+
+export async function saveDeviceGroups(
+  groups: Record<string, string[]>,
+): Promise<{ ok: boolean; groups: { groups: Record<string, string[]>; updatedAt: number | null } }> {
+  const response = await fetch(`${apiBaseUrl}/groups.json`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ groups }),
+  });
+  if (!response.ok) {
+    throw new Error(`groups save failed: ${response.status}`);
+  }
+  return response.json() as Promise<{
+    ok: boolean;
+    groups: { groups: Record<string, string[]>; updatedAt: number | null };
+  }>;
+}

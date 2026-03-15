@@ -13,6 +13,7 @@ const baseNode: GraphNode = {
   lastHandshake: "",
   lastSeen: "",
   lastWrite: "",
+  groups: ["Production"],
   tags: ["tag:prod"],
   routes: [],
   online: true,
@@ -34,16 +35,25 @@ const baseNode: GraphNode = {
 };
 
 describe("filterNodes", () => {
-  it("filters by search, status, tag, and special role", () => {
+  it("filters by search, status, group, tag, and special role", () => {
     const nodes = [
       baseNode,
-      { ...baseNode, id: "peer2", name: "gamma", tags: ["tag:dev"], online: false, subnetRouter: true },
+      {
+        ...baseNode,
+        id: "peer2",
+        name: "gamma",
+        groups: ["Engineering"],
+        tags: ["tag:dev"],
+        online: false,
+        subnetRouter: true,
+      },
     ];
 
     expect(
       filterNodes(nodes, {
         query: "gam",
         status: "offline",
+        group: "Engineering",
         tag: "tag:dev",
         special: "router",
       }),

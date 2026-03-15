@@ -44,7 +44,11 @@ class LayoutStore:
         with self._lock:
             return self._read_unlocked()
 
-    def save(self, nodes: dict[str, dict[str, float]], viewport: dict[str, float] | None = None) -> dict:
+    def save(
+        self,
+        nodes: dict[str, dict[str, float]],
+        viewport: dict[str, float] | None = None,
+    ) -> dict:
         payload = {
             "nodes": _coerce_nodes(nodes),
             "viewport": _coerce_viewport(viewport),

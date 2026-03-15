@@ -36,6 +36,7 @@ function normalizeNode(raw: {
   lastHandshake?: string;
   lastSeen?: string;
   lastWrite?: string;
+  groups?: string[];
   tags?: string[];
   routes?: string[];
   online?: boolean | null;
@@ -49,6 +50,7 @@ function normalizeNode(raw: {
   servicesStatus?: string;
   servicesError?: string;
 }, role: "self" | "peer", fallbackId: string): GraphNode {
+  const groups = raw.groups || [];
   const tags = raw.tags || [];
   const routes = raw.routes || [];
   const dns = (raw.dns || "").replace(/\.$/, "");
@@ -72,6 +74,7 @@ function normalizeNode(raw: {
     lastHandshake: raw.lastHandshake || "",
     lastSeen: raw.lastSeen || "",
     lastWrite: raw.lastWrite || "",
+    groups,
     tags,
     routes,
     online: role === "self" ? true : (raw.online ?? null),
@@ -110,6 +113,7 @@ export function buildGraphFromStatus(status: TailscaleStatus): GraphData {
       lastHandshake: selfRaw.LastHandshake || "",
       lastSeen: selfRaw.LastSeen || "",
       lastWrite: selfRaw.LastWrite || "",
+      groups: selfRaw.Groups || [],
       tags: selfRaw.Tags || [],
       routes: selfRaw.PrimaryRoutes || selfRaw.AllowedIPs || [],
       online: true,
@@ -144,6 +148,7 @@ export function buildGraphFromStatus(status: TailscaleStatus): GraphData {
         lastHandshake: peerRaw.LastHandshake || "",
         lastSeen: peerRaw.LastSeen || "",
         lastWrite: peerRaw.LastWrite || "",
+        groups: peerRaw.Groups || [],
         tags: peerRaw.Tags || [],
         routes: peerRaw.PrimaryRoutes || peerRaw.AllowedIPs || [],
         online: peerRaw.Online ?? null,
@@ -181,6 +186,7 @@ export function buildGraphFromStatus(status: TailscaleStatus): GraphData {
     generatedAt: status._meta?.generatedAtISO || new Date().toISOString(),
     nodes,
     edges,
+    allGroups: [...new Set(nodes.flatMap((node) => node.groups))].sort(),
     allTags: [...new Set(nodes.flatMap((node) => node.tags))].sort(),
   };
 }

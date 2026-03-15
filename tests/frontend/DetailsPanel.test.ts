@@ -17,6 +17,7 @@ function makeNode(overrides: Partial<GraphNode> = {}): GraphNode {
     lastHandshake: "2026-03-14T11:59:30Z",
     lastSeen: "2026-03-14T11:59:00Z",
     lastWrite: "2026-03-14T11:57:00Z",
+    groups: ["Production"],
     tags: ["tag:prod"],
     routes: [],
     online: true,
@@ -46,7 +47,14 @@ describe("DetailsPanel", () => {
   });
 
   it("renders relative time values for recent timestamps", () => {
-    render(React.createElement(DetailsPanel, { node: makeNode(), onClose: () => {} }));
+    render(
+      React.createElement(DetailsPanel, {
+        node: makeNode(),
+        onClose: () => {},
+        onAddGroup: () => {},
+        onRemoveGroup: () => {},
+      }),
+    );
 
     expect(screen.getByText("1m ago")).toBeInTheDocument();
     expect(screen.getByText("just now")).toBeInTheDocument();
@@ -63,6 +71,8 @@ describe("DetailsPanel", () => {
           lastWrite: "",
         }),
         onClose: () => {},
+        onAddGroup: () => {},
+        onRemoveGroup: () => {},
       }),
     );
 
@@ -78,6 +88,8 @@ describe("DetailsPanel", () => {
           lastWrite: "never",
         }),
         onClose: () => {},
+        onAddGroup: () => {},
+        onRemoveGroup: () => {},
       }),
     );
 
@@ -95,6 +107,8 @@ describe("DetailsPanel", () => {
           lastWrite: "0001-01-01T00:17:30Z",
         }),
         onClose: () => {},
+        onAddGroup: () => {},
+        onRemoveGroup: () => {},
       }),
     );
 
@@ -103,7 +117,12 @@ describe("DetailsPanel", () => {
 
   it("renders discovered services and fallback empty state", () => {
     const { rerender } = render(
-      React.createElement(DetailsPanel, { node: makeNode(), onClose: () => {} }),
+      React.createElement(DetailsPanel, {
+        node: makeNode(),
+        onClose: () => {},
+        onAddGroup: () => {},
+        onRemoveGroup: () => {},
+      }),
     );
 
     expect(screen.getByRole("link", { name: "fastapi 8000/tcp" })).toHaveAttribute(
@@ -119,6 +138,8 @@ describe("DetailsPanel", () => {
           servicesStatus: "ready",
         }),
         onClose: () => {},
+        onAddGroup: () => {},
+        onRemoveGroup: () => {},
       }),
     );
 
@@ -132,6 +153,8 @@ describe("DetailsPanel", () => {
           services: [{ label: "https", port: 443, protocol: "tcp" }],
         }),
         onClose: () => {},
+        onAddGroup: () => {},
+        onRemoveGroup: () => {},
       }),
     );
 

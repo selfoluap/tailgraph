@@ -8,6 +8,7 @@ const DRAG_THRESHOLD_PX = 40;
 
 interface ControlSheetProps {
   filters: FiltersState;
+  groups: string[];
   tags: string[];
   peers: GraphNode[];
   isDesktop: boolean;
@@ -20,6 +21,7 @@ interface ControlSheetProps {
 
 export function ControlSheet({
   filters,
+  groups,
   tags,
   peers,
   isDesktop,
@@ -177,7 +179,7 @@ export function ControlSheet({
               <div className="controlLabel">Search</div>
               <input
                 id="search"
-                placeholder="Search name, IP, DNS, tag, OS"
+                placeholder="Search name, IP, DNS, group, Tailscale tag, OS"
                 value={filters.query}
                 onChange={(event) => onChange({ query: event.target.value })}
               />
@@ -199,13 +201,28 @@ export function ControlSheet({
               </select>
             </div>
             <div className="controlGroup">
-              <div className="controlLabel">Tags</div>
+              <div className="controlLabel">Groups</div>
+              <select
+                id="groupFilter"
+                value={filters.group}
+                onChange={(event) => onChange({ group: event.target.value })}
+              >
+                <option value="all">All groups</option>
+                {groups.map((group) => (
+                  <option value={group} key={group}>
+                    {group}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="controlGroup">
+              <div className="controlLabel">Tailscale Tags</div>
               <select
                 id="tagFilter"
                 value={filters.tag}
                 onChange={(event) => onChange({ tag: event.target.value })}
               >
-                <option value="all">All tags</option>
+                <option value="all">All Tailscale tags</option>
                 {tags.map((tag) => (
                   <option value={tag} key={tag}>
                     {tag}
@@ -238,6 +255,11 @@ export function ControlSheet({
                 {statusText(node)} · {node.ip || "n/a"} · {node.os || "unknown"}
               </div>
               <div>
+                {node.groups.slice(0, 3).map((group) => (
+                  <span className="badge group" key={group}>
+                    {group}
+                  </span>
+                ))}
                 {(node.exitNode || node.exitNodeOption) && <span className="badge exit">EXIT</span>}
                 {node.subnetRouter && <span className="badge router">ROUTE</span>}
                 {node.tags.slice(0, 4).map((tag) => (

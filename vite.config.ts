@@ -16,6 +16,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/config.json": "http://127.0.0.1:8081",
+      "/groups.json": "http://127.0.0.1:8081",
       "/status.json": "http://127.0.0.1:8081",
       "/healthz": "http://127.0.0.1:8081",
     },

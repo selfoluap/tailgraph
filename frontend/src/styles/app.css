@@ -86,14 +86,44 @@ select {
   font-size: 12px;
 }
 
+.savechip.saved {
+  border-color: var(--online);
+}
+
+.savechip.error {
+  border-color: var(--offline);
+}
+
+.savechip.saving {
+  border-color: var(--unknown);
+}
+
 .toolbarbtn {
   padding: 10px 12px;
   font-size: 12px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .toolbarbtn.active {
   outline: 2px solid rgba(255, 255, 255, 0.18);
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: var(--text);
+  border-radius: 999px;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 #sheet {
@@ -148,12 +178,13 @@ select {
 
 .filterGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
 #search,
 #status,
+#groupFilter,
 #tagFilter,
 #specialFilter {
   width: 100%;
@@ -221,8 +252,41 @@ select {
   border-color: var(--accent);
 }
 
+.badge.group {
+  border-color: #f59e0b;
+}
+
 .badge.router {
   border-color: var(--router);
+}
+
+.groupEditor {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.groupInput {
+  min-width: 0;
+  flex: 1;
+  background: #0d1430;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.groupAddButton,
+.groupButton {
+  cursor: pointer;
+}
+
+.groupAddButton {
+  border: 1px solid var(--line);
+  background: #0d1430;
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
 }
 
 #details {

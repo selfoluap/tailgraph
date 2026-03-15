@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchGraphConfig, fetchStatus, saveGraphConfig } from "./api/status";
+import { fetchDeviceGroups, fetchGraphConfig, fetchStatus, saveDeviceGroups, saveGraphConfig } from "./api/status";
 import { CanvasGraph } from "./components/CanvasGraph";
 import { ControlSheet } from "./components/ControlSheet";
 import { DetailsPanel } from "./components/DetailsPanel";
@@ -13,6 +13,7 @@ import type { FiltersState, GraphData, GraphNode, NodePositionMap, ViewportState
 const defaultFilters: FiltersState = {
   query: "",
   status: "all",
+  group: "all",
   tag: "all",
   special: "all",
 };
@@ -21,6 +22,7 @@ const emptyGraph: GraphData = {
   generatedAt: "--",
   nodes: [],
   edges: [],
+  allGroups: [],
   allTags: [],
 };
 
@@ -79,6 +81,28 @@ function viewportEqual(a: ViewportState, b: ViewportState): boolean {
   return a.x === b.x && a.y === b.y && a.scale === b.scale;
 }
 
+function groupsEqual(a: Record<string, string[]>, b: Record<string, string[]>): boolean {
+  const aKeys = Object.keys(a).sort();
+  const bKeys = Object.keys(b).sort();
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+
+  return aKeys.every((key, index) => {
+    if (key !== bKeys[index]) {
+      return false;
+    }
+
+    const aGroups = a[key] || [];
+    const bGroups = b[key] || [];
+    if (aGroups.length !== bGroups.length) {
+      return false;
+    }
+
+    return aGroups.every((group, groupIndex) => group === bGroups[groupIndex]);
+  });
+}
+
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 900);
 
@@ -93,6 +117,7 @@ function useIsDesktop() {
 
 export default function App() {
   const [graph, setGraph] = useState<GraphData>(emptyGraph);
+  const [deviceGroups, setDeviceGroups] = useState<Record<string, string[]>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FiltersState>(defaultFilters);
   const [viewport, setViewport] = useState<ViewportState>({ x: 0, y: 0, scale: 1 });
@@ -100,8 +125,10 @@ export default function App() {
   const [sheetOpen, setSheetOpen] = useState(() => window.innerWidth >= 900);
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveMessage, setSaveMessage] = useState("");
   const graphRef = useRef(graph);
   const persistedPositionsRef = useRef<NodePositionMap>({});
+  const persistedGroupsRef = useRef<Record<string, string[]>>({});
   const persistedViewportRef = useRef<ViewportState>({ x: 0, y: 0, scale: 1 });
   const isDesktop = useIsDesktop();
 
@@ -110,11 +137,14 @@ export default function App() {
   }, [graph]);
 
   useEffect(() => {
-    if (saveState !== "saved") {
+    if (saveState !== "saved" && saveState !== "error") {
       return undefined;
     }
 
-    const timer = window.setTimeout(() => setSaveState("idle"), 1800);
+    const timer = window.setTimeout(() => {
+      setSaveState("idle");
+      setSaveMessage("");
+    }, 1800);
     return () => window.clearTimeout(timer);
   }, [saveState]);
 
@@ -141,11 +171,13 @@ export default function App() {
 
     async function bootstrap() {
       try {
-        const config = await fetchGraphConfig();
+        const [config, groups] = await Promise.all([fetchGraphConfig(), fetchDeviceGroups()]);
         if (cancelled) {
           return;
         }
         persistedPositionsRef.current = config.nodes;
+        persistedGroupsRef.current = groups.groups || {};
+        setDeviceGroups(groups.groups || {});
         if (config.viewport) {
           persistedViewportRef.current = config.viewport;
           setViewport(config.viewport);
@@ -185,35 +217,59 @@ export default function App() {
     const nextViewport = viewport;
     if (
       positionsEqual(nextPositions, persistedPositionsRef.current) &&
-      viewportEqual(nextViewport, persistedViewportRef.current)
+      viewportEqual(nextViewport, persistedViewportRef.current) &&
+      groupsEqual(deviceGroups, persistedGroupsRef.current)
     ) {
       setSaveState("saved");
+      setSaveMessage("Layout and groups already saved");
       return;
     }
 
     setSaveState("saving");
+    setSaveMessage("Saving layout and groups");
 
     try {
-      const result = await saveGraphConfig(nextPositions, nextViewport);
-      if (!result.ok) {
+      const [configResult, groupsResult] = await Promise.all([
+        saveGraphConfig(nextPositions, nextViewport),
+        saveDeviceGroups(deviceGroups),
+      ]);
+      if (!configResult.ok || !groupsResult.ok) {
         setSaveState("error");
+        setSaveMessage("Save failed");
         return;
       }
+
       persistedPositionsRef.current = nextPositions;
+      persistedGroupsRef.current = groupsResult.groups.groups;
       persistedViewportRef.current = nextViewport;
+      await refreshStatus(true);
       setSaveState("saved");
+      setSaveMessage("Layout and groups saved");
     } catch (caught) {
       console.error(caught);
       setSaveState("error");
+      setSaveMessage("Save failed");
     }
-  }, [viewport]);
+  }, [deviceGroups, refreshStatus, viewport]);
+
+  useEffect(() => {
+    setGraph((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) => ({
+        ...node,
+        groups: deviceGroups[node.hostname] || node.groups,
+      })),
+      allGroups: [...new Set(Object.values(deviceGroups).flat())].sort(),
+    }));
+  }, [deviceGroups]);
 
   const currentPositions = useMemo(() => positionsFromNodes(graph.nodes), [graph.nodes]);
 
   useEffect(() => {
     if (
       positionsEqual(currentPositions, persistedPositionsRef.current) &&
-      viewportEqual(viewport, persistedViewportRef.current)
+      viewportEqual(viewport, persistedViewportRef.current) &&
+      groupsEqual(deviceGroups, persistedGroupsRef.current)
     ) {
       if (saveState !== "saving" && saveState !== "saved") {
         setSaveState("idle");
@@ -224,7 +280,7 @@ export default function App() {
     if (saveState !== "saving") {
       setSaveState("idle");
     }
-  }, [currentPositions, saveState, viewport]);
+  }, [currentPositions, deviceGroups, saveState, viewport]);
 
   return (
     <div id="app">
@@ -250,6 +306,7 @@ export default function App() {
         generatedAt={error ? "error" : graph.generatedAt}
         autoRefresh={autoRefresh}
         saveState={saveState}
+        saveMessage={saveMessage}
         onSaveConfig={() => {
           void saveConfig();
         }}
@@ -258,6 +315,7 @@ export default function App() {
 
       <ControlSheet
         filters={filters}
+        groups={graph.allGroups}
         tags={graph.allTags}
         peers={filteredPeers}
         isDesktop={isDesktop}
@@ -278,7 +336,54 @@ export default function App() {
         onSetSheetOpen={setSheetOpen}
       />
 
-      <DetailsPanel node={selectedNode} onClose={() => setSelectedId(null)} />
+      <DetailsPanel
+        node={selectedNode}
+        onClose={() => setSelectedId(null)}
+        onAddGroup={(nodeId, groupName) => {
+          const clean = groupName.trim();
+          if (!clean) {
+            return;
+          }
+
+          const node = graph.nodes.find((candidate) => candidate.id === nodeId);
+          const hostname = node?.hostname?.trim();
+          if (!hostname) {
+            return;
+          }
+
+          setDeviceGroups((current) => {
+            const existing = current[hostname] || [];
+            if (existing.some((group) => group.toLowerCase() === clean.toLowerCase())) {
+              return current;
+            }
+
+            return {
+              ...current,
+              [hostname]: [...existing, clean].sort((a, b) => a.localeCompare(b)),
+            };
+          });
+        }}
+        onRemoveGroup={(nodeId, groupName) => {
+          const node = graph.nodes.find((candidate) => candidate.id === nodeId);
+          const hostname = node?.hostname?.trim();
+          if (!hostname) {
+            return;
+          }
+
+          setDeviceGroups((current) => {
+            const nextGroups = (current[hostname] || []).filter((group) => group !== groupName);
+            if (nextGroups.length === 0) {
+              const { [hostname]: _removed, ...rest } = current;
+              return rest;
+            }
+
+            return {
+              ...current,
+              [hostname]: nextGroups,
+            };
+          });
+        }}
+      />
     </div>
   );
 }

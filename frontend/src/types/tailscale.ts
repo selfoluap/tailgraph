@@ -5,6 +5,7 @@ export interface TailscalePeer {
   DNSName?: string;
   ExitNode?: boolean;
   ExitNodeOption?: boolean;
+  Groups?: string[];
   HostName?: string;
   LastHandshake?: string;
   LastSeen?: string;

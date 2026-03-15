@@ -1,12 +1,22 @@
+import { useEffect, useState } from "react";
+
 import type { GraphNode } from "../types/graph";
 import { statusText } from "../graph/buildGraph";
 
 interface DetailsPanelProps {
   node: GraphNode | null;
   onClose: () => void;
+  onAddGroup: (nodeId: string, groupName: string) => void;
+  onRemoveGroup: (nodeId: string, groupName: string) => void;
 }
 
-export function DetailsPanel({ node, onClose }: DetailsPanelProps) {
+export function DetailsPanel({ node, onClose, onAddGroup, onRemoveGroup }: DetailsPanelProps) {
+  const [groupDraft, setGroupDraft] = useState("");
+
+  useEffect(() => {
+    setGroupDraft("");
+  }, [node?.id]);
+
   return (
     <div id="details" className={node ? "show" : ""}>
       <button className="closebtn" onClick={onClose} type="button">
@@ -32,7 +42,50 @@ export function DetailsPanel({ node, onClose }: DetailsPanelProps) {
             <div>{formatNodeTimestamp(node, "lastWrite")}</div>
             <div className="k">Relay</div>
             <div>{node.relay || "unknown"}</div>
-            <div className="k">Tags</div>
+            <div className="k">Groups</div>
+            <div>
+              <div className="groupEditor">
+                <input
+                  className="groupInput"
+                  placeholder="Add group"
+                  value={groupDraft}
+                  onChange={(event) => setGroupDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") {
+                      return;
+                    }
+                    event.preventDefault();
+                    onAddGroup(node.id, groupDraft);
+                    setGroupDraft("");
+                  }}
+                />
+                <button
+                  className="groupAddButton"
+                  onClick={() => {
+                    onAddGroup(node.id, groupDraft);
+                    setGroupDraft("");
+                  }}
+                  type="button"
+                >
+                  Add
+                </button>
+              </div>
+              {node.groups.length > 0 ? (
+                node.groups.map((group) => (
+                  <button
+                    className="badge group groupButton"
+                    key={group}
+                    onClick={() => onRemoveGroup(node.id, group)}
+                    type="button"
+                  >
+                    {group} x
+                  </button>
+                ))
+              ) : (
+                <span className="badge">none</span>
+              )}
+            </div>
+            <div className="k">Tailscale Tags</div>
             <div>
               {node.tags.length > 0 ? (
                 node.tags.map((tag) => (

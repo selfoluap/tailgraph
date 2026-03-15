@@ -14,6 +14,7 @@ export interface GraphNode {
   lastHandshake: string;
   lastSeen: string;
   lastWrite: string;
+  groups: string[];
   tags: string[];
   routes: string[];
   online: boolean | null;
@@ -43,6 +44,7 @@ export interface GraphData {
   generatedAt: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
+  allGroups: string[];
   allTags: string[];
 }
 
@@ -62,6 +64,7 @@ export type NodePositionMap = Record<string, NodePosition>;
 export interface FiltersState {
   query: string;
   status: "all" | "online" | "offline" | "unknown";
+  group: string;
   tag: string;
   special: "all" | "exit" | "router" | "special";
 }
