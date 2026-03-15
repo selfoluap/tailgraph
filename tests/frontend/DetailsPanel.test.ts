@@ -106,7 +106,10 @@ describe("DetailsPanel", () => {
       React.createElement(DetailsPanel, { node: makeNode(), onClose: () => {} }),
     );
 
-    expect(screen.getByText("fastapi 8000/tcp")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "fastapi 8000/tcp" })).toHaveAttribute(
+      "href",
+      "http://beta.tail.ts.net:8000",
+    );
 
     rerender(
       React.createElement(DetailsPanel, {
@@ -120,5 +123,21 @@ describe("DetailsPanel", () => {
     );
 
     expect(screen.getByText("no configured service ports reachable")).toBeInTheDocument();
+  });
+
+  it("uses https links for secure service ports", () => {
+    render(
+      React.createElement(DetailsPanel, {
+        node: makeNode({
+          services: [{ label: "https", port: 443, protocol: "tcp" }],
+        }),
+        onClose: () => {},
+      }),
+    );
+
+    expect(screen.getByRole("link", { name: "https 443/tcp" })).toHaveAttribute(
+      "href",
+      "https://beta.tail.ts.net:443",
+    );
   });
 });

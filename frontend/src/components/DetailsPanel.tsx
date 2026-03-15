@@ -48,9 +48,15 @@ export function DetailsPanel({ node, onClose }: DetailsPanelProps) {
             <div>
               {node.services.length > 0 ? (
                 node.services.map((service) => (
-                  <span className="badge" key={`${service.protocol}-${service.port}`}>
+                  <a
+                    className="badge service-link"
+                    href={buildServiceUrl(node, service.port, service.protocol, service.label)}
+                    key={`${service.protocol}-${service.port}`}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
                     {service.label} {service.port}/{service.protocol}
-                  </span>
+                  </a>
                 ))
               ) : (
                 <span>{serviceEmptyState(node)}</span>
@@ -73,6 +79,24 @@ function serviceEmptyState(node: GraphNode): string {
     return "service discovery disabled";
   }
   return "no configured service ports reachable";
+}
+
+function buildServiceUrl(node: GraphNode, port: number, protocol: string, label: string): string {
+  const host = node.dns || node.hostname || node.ip;
+  const scheme = inferServiceScheme(port, protocol, label);
+  return `${scheme}://${host}:${port}`;
+}
+
+function inferServiceScheme(port: number, protocol: string, label: string): string {
+  const normalizedProtocol = protocol.toLowerCase();
+  const normalizedLabel = label.toLowerCase();
+  if (normalizedProtocol === "http" || normalizedProtocol === "https") {
+    return normalizedProtocol;
+  }
+  if (port === 443 || port === 8443 || normalizedLabel.includes("https")) {
+    return "https";
+  }
+  return "http";
 }
 
 function formatServiceScan(node: GraphNode): string {
