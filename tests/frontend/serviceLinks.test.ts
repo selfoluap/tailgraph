@@ -48,6 +48,40 @@ describe("serviceLinks", () => {
     expect(url).toBe("http://beta.tail.ts.net:8000");
   });
 
+  it("falls back to the Tailscale IP before hostname when MagicDNS is unavailable", () => {
+    const url = buildServiceUrl(
+      makeNode({
+        dns: "",
+        hostname: "beta",
+        ip: "100.64.0.2",
+      }),
+      {
+        label: "fastapi",
+        port: 8000,
+        protocol: "tcp",
+      },
+    );
+
+    expect(url).toBe("http://100.64.0.2:8000");
+  });
+
+  it("falls back to hostname only when DNS and IP are both unavailable", () => {
+    const url = buildServiceUrl(
+      makeNode({
+        dns: "",
+        hostname: "beta",
+        ip: "",
+      }),
+      {
+        label: "fastapi",
+        port: 8000,
+        protocol: "tcp",
+      },
+    );
+
+    expect(url).toBe("http://beta:8000");
+  });
+
   it("prefers https for secure ports and labels", () => {
     expect(inferServiceScheme(443, "tcp", "admin")).toBe("https");
     expect(inferServiceScheme(8443, "tcp", "dashboard")).toBe("https");

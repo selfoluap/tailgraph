@@ -271,20 +271,6 @@ export function CanvasGraph({
         context.stroke();
       }
 
-      if (node.exitNode || node.exitNodeOption) {
-        context.beginPath();
-        context.arc(left + metrics.width - 8, top + 8, 6, 0, Math.PI * 2);
-        context.fillStyle = rootStyle.getPropertyValue("--accent").trim();
-        context.fill();
-      }
-
-      if (node.subnetRouter) {
-        context.beginPath();
-        context.arc(left + 8, top + 8, 6, 0, Math.PI * 2);
-        context.fillStyle = rootStyle.getPropertyValue("--router").trim();
-        context.fill();
-      }
-
       const visibleServices = getVisibleServices(node);
       if (visibleServices.length > 0) {
         let offsetY = top + metrics.glyphHeight + 6;
