@@ -485,10 +485,92 @@ select {
 @media (max-width: 899px) {
   .topbar {
     flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
   }
 
   .filterGrid {
     grid-template-columns: 1fr;
+  }
+
+  .chips,
+  .toolbar {
+    gap: 6px;
+  }
+
+  .chip,
+  .toolbarbtn {
+    font-size: 11px;
+  }
+
+  .chip {
+    padding: 6px 9px;
+  }
+
+  .toolbarbtn {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .viewtab {
+    min-width: 60px;
+  }
+
+  #sheet {
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    padding: 8px 12px calc(12px + env(safe-area-inset-bottom, 0));
+    min-height: 96px;
+  }
+
+  #search,
+  #status,
+  #groupFilter,
+  #tagFilter,
+  #specialFilter,
+  .groupInput,
+  .groupAddButton,
+  .sidebarActionButton,
+  .item {
+    padding: 10px;
+  }
+
+  #details,
+  .sidebarCard {
+    padding: 10px;
+  }
+
+  #details h2 {
+    font-size: 15px;
+  }
+
+  .kv,
+  .item .meta {
+    font-size: 12px;
+  }
+
+  .closebtn {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+@media (max-width: 479px) {
+  .chip,
+  .toolbarbtn,
+  .controlLabel,
+  .sectionTitle,
+  .filterClearButton,
+  .badge {
+    font-size: 10px;
+  }
+
+  .toolbarbtn {
+    padding: 7px 9px;
+  }
+
+  .item .name {
+    font-size: 13px;
   }
 }
 

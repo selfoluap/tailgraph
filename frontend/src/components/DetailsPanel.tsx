@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { buildServiceUrl } from "../graph/serviceLinks";
 import type { GraphNode } from "../types/graph";
 import { statusText } from "../graph/buildGraph";
 
@@ -86,6 +87,24 @@ export function DetailsPanel({ node, onClose, onAddGroup, onRemoveGroup }: Detai
                 <span className="badge">none</span>
               )}
             </div>
+            <div className="k">Services</div>
+            <div>
+              {node.services.length > 0 ? (
+                  node.services.map((service) => (
+                    <a
+                      className="badge service-link"
+                      href={buildServiceUrl(node, service)}
+                      key={`${service.protocol}-${service.port}`}
+                      rel="noreferrer"
+                      target="_blank"
+                  >
+                    {service.label} {service.port}/{service.protocol}
+                  </a>
+                ))
+              ) : (
+                <span>{serviceEmptyState(node)}</span>
+              )}
+            </div>
           </div>
           <button
             className="detailsExpandButton"
@@ -109,24 +128,6 @@ export function DetailsPanel({ node, onClose, onAddGroup, onRemoveGroup }: Detai
               <div>{formatNodeTimestamp(node, "lastWrite")}</div>
               <div className="k">Relay</div>
               <div>{node.relay || "unknown"}</div>
-              <div className="k">Services</div>
-              <div>
-                {node.services.length > 0 ? (
-                  node.services.map((service) => (
-                    <a
-                      className="badge service-link"
-                      href={buildServiceUrl(node, service.port, service.protocol, service.label)}
-                      key={`${service.protocol}-${service.port}`}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      {service.label} {service.port}/{service.protocol}
-                    </a>
-                  ))
-                ) : (
-                  <span>{serviceEmptyState(node)}</span>
-                )}
-              </div>
               <div className="k">Service scan</div>
               <div>{formatServiceScan(node)}</div>
             </div>
@@ -145,24 +146,6 @@ function serviceEmptyState(node: GraphNode): string {
     return "service discovery disabled";
   }
   return "no configured service ports reachable";
-}
-
-function buildServiceUrl(node: GraphNode, port: number, protocol: string, label: string): string {
-  const host = node.dns || node.hostname || node.ip;
-  const scheme = inferServiceScheme(port, protocol, label);
-  return `${scheme}://${host}:${port}`;
-}
-
-function inferServiceScheme(port: number, protocol: string, label: string): string {
-  const normalizedProtocol = protocol.toLowerCase();
-  const normalizedLabel = label.toLowerCase();
-  if (normalizedProtocol === "http" || normalizedProtocol === "https") {
-    return normalizedProtocol;
-  }
-  if (port === 443 || port === 8443 || normalizedLabel.includes("https")) {
-    return "https";
-  }
-  return "http";
 }
 
 function formatServiceScan(node: GraphNode): string {

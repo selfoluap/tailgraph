@@ -3,3 +3,5 @@ node_modules/
 frontend/dist/
 __pycache__/
 .pytest_cache/
+.tailgraph-config.json
+.tailgraph-groups.json

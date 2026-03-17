@@ -7,6 +7,10 @@
     "dev": "vite --config vite.config.ts",
     "dev:frontend": "vite --config vite.config.ts",
     "dev:backend": ".venv/bin/python -m uvicorn backend.app:create_app --factory --reload --host 0.0.0.0 --port 8081",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:restart": "pm2 reload ecosystem.config.cjs --update-env",
+    "pm2:stop": "pm2 delete tailgraph-backend tailgraph-frontend",
+    "pm2:logs": "pm2 logs",
     "build": "tsc --noEmit && vite build --config vite.config.ts",
     "test": "vitest run"
   },

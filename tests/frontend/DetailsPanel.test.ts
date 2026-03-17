@@ -129,7 +129,6 @@ describe("DetailsPanel", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand details" }));
     expect(screen.getByRole("link", { name: "fastapi 8000/tcp" })).toHaveAttribute(
       "href",
       "http://beta.tail.ts.net:8000",
@@ -150,7 +149,6 @@ describe("DetailsPanel", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand details" }));
     expect(screen.getByText("no configured service ports reachable")).toBeInTheDocument();
   });
 
@@ -166,7 +164,6 @@ describe("DetailsPanel", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand details" }));
     expect(screen.getByRole("link", { name: "https 443/tcp" })).toHaveAttribute(
       "href",
       "https://beta.tail.ts.net:443",
@@ -187,8 +184,9 @@ describe("DetailsPanel", () => {
     expect(screen.getByText("IP")).toBeInTheDocument();
     expect(screen.getByText("Groups")).toBeInTheDocument();
     expect(screen.getByText("Tailscale Tags")).toBeInTheDocument();
+    expect(screen.getByText("Services")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "fastapi 8000/tcp" })).toBeInTheDocument();
     expect(screen.queryByText("DNS")).not.toBeInTheDocument();
-    expect(screen.queryByText("Services")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Expand details" })).toBeInTheDocument();
   });
 });

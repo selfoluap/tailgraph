@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
 
+import { buildServiceUrl } from "../graph/serviceLinks";
 import { statusText } from "../graph/buildGraph";
 import { filterEdges, filterNodes } from "../graph/filterNodes";
 import { clampScale, screenToWorld, worldToScreen } from "../graph/viewport";
-import type { FiltersState, GraphData, GraphNode, ViewportState } from "../types/graph";
+import type { FiltersState, GraphData, GraphNode, GraphService, ViewportState } from "../types/graph";
 
 interface CanvasGraphProps {
   graph: GraphData;
@@ -14,6 +15,105 @@ interface CanvasGraphProps {
   onSelect: (nodeId: string | null) => void;
   onDragNode: (nodeId: string, x: number, y: number) => void;
   onDragStateChange: (nodeId: string | null) => void;
+}
+
+interface ServiceHitRegion {
+  nodeId: string;
+  service: GraphService;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function getCanvasDensityScale(screenWidth: number) {
+  if (screenWidth < 480) {
+    return 0.82;
+  }
+  if (screenWidth < 900) {
+    return 0.9;
+  }
+  return 1;
+}
+
+function roundRectPath(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const r = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.lineTo(x + width - r, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + r);
+  context.lineTo(x + width, y + height - r);
+  context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  context.lineTo(x + r, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - r);
+  context.lineTo(x, y + r);
+  context.quadraticCurveTo(x, y, x + r, y);
+  context.closePath();
+}
+
+function drawServerGlyph(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const rackHeight = (height - 10) / 2;
+  for (let index = 0; index < 2; index += 1) {
+    const top = y + 4 + index * (rackHeight + 2);
+    roundRectPath(context, x + 4, top, width - 8, rackHeight, 4);
+    context.fillStyle = "rgba(255,255,255,0.08)";
+    context.fill();
+
+    context.fillStyle = "rgba(232,236,248,0.55)";
+    context.fillRect(x + 10, top + rackHeight / 2 - 1, width - 20, 2);
+  }
+}
+
+function getVisibleServices(node: GraphNode) {
+  return node.services.slice(0, 3);
+}
+
+function nodePalette(rootStyle: CSSStyleDeclaration, node: GraphNode) {
+  const accent = nodeColor(rootStyle, node);
+  return {
+    accent,
+    border: node.id === "self" ? "rgba(96,165,250,0.95)" : accent,
+    fill: node.id === "self" ? "rgba(18,34,68,0.95)" : "rgba(12,18,36,0.94)",
+    glow: `${accent}33`,
+  };
+}
+
+function getNodeCardMetrics(node: GraphNode, viewport: ViewportState, screenWidth: number) {
+  const scale = Math.max(0.95, Math.min(1.35, viewport.scale)) * getCanvasDensityScale(screenWidth);
+  const services = getVisibleServices(node);
+  const width = 108 * scale;
+  const glyphHeight = 34 * scale;
+  const serviceAreaHeight = services.length > 0 ? services.length * 22 * scale + 8 * scale : 0;
+  const height = glyphHeight + serviceAreaHeight;
+  const radius = 12 * scale;
+  return { width, height, radius, glyphHeight };
+}
+
+function serviceBadgeText(service: GraphService): string {
+  return `${service.label} ${service.port}`;
+}
+
+function serviceBadgeMetrics(service: GraphService, viewport: ViewportState, screenWidth: number) {
+  const scale = Math.max(0.9, Math.min(1.2, viewport.scale)) * getCanvasDensityScale(screenWidth);
+  const fontSize = Math.max(10, Math.round(11 * scale));
+  const paddingX = 8 * scale;
+  const height = 20 * scale;
+  const radius = 10 * scale;
+  const text = serviceBadgeText(service);
+  return { fontSize, paddingX, height, radius, text };
 }
 
 function nodeColor(rootStyle: CSSStyleDeclaration, node: GraphNode): string {
@@ -59,6 +159,7 @@ export function CanvasGraph({
     distance: number;
     scale: number;
   } | null>(null);
+  const serviceHitRegionsRef = useRef<ServiceHitRegion[]>([]);
 
   const filteredNodes = filterNodes(graph.nodes, filters);
   const filteredEdges = filterEdges(graph.edges, filteredNodes);
@@ -71,11 +172,28 @@ export function CanvasGraph({
     for (let index = filteredNodes.length - 1; index >= 0; index -= 1) {
       const node = filteredNodes[index];
       const point = worldToScreen(node.x, node.y, viewport, width, height);
-      const radius = node.r * Math.max(0.9, Math.min(1.4, viewport.scale)) + 8;
-      const dx = clientX - point.x;
-      const dy = clientY - point.y;
-      if (dx * dx + dy * dy <= radius * radius) {
+      const metrics = getNodeCardMetrics(node, viewport, width);
+      const left = point.x - metrics.width / 2 - 8;
+      const right = point.x + metrics.width / 2 + 8;
+      const top = point.y - metrics.height / 2 - 8;
+      const bottom = point.y + metrics.height / 2 + 8;
+      if (clientX >= left && clientX <= right && clientY >= top && clientY <= bottom) {
         return node;
+      }
+    }
+    return null;
+  }
+
+  function findServiceAtPoint(clientX: number, clientY: number) {
+    for (let index = serviceHitRegionsRef.current.length - 1; index >= 0; index -= 1) {
+      const region = serviceHitRegionsRef.current[index];
+      if (
+        clientX >= region.x &&
+        clientX <= region.x + region.width &&
+        clientY >= region.y &&
+        clientY <= region.y + region.height
+      ) {
+        return region;
       }
     }
     return null;
@@ -101,6 +219,7 @@ export function CanvasGraph({
     canvas.style.height = `${height}px`;
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
     context.clearRect(0, 0, width, height);
+    serviceHitRegionsRef.current = [];
 
     const rootStyle = getComputedStyle(document.documentElement);
 
@@ -122,16 +241,31 @@ export function CanvasGraph({
 
     for (const node of filteredNodes) {
       const point = worldToScreen(node.x, node.y, viewport, width, height);
-      const radius = node.r * Math.max(0.9, Math.min(1.4, viewport.scale));
+      const metrics = getNodeCardMetrics(node, viewport, width);
+      const palette = nodePalette(rootStyle, node);
+      const left = point.x - metrics.width / 2;
+      const top = point.y - metrics.height / 2;
 
-      context.beginPath();
-      context.arc(point.x, point.y, radius, 0, Math.PI * 2);
-      context.fillStyle = nodeColor(rootStyle, node);
+      roundRectPath(context, left, top, metrics.width, metrics.height, metrics.radius);
+      context.fillStyle = palette.fill;
       context.fill();
+      context.strokeStyle = palette.border;
+      context.lineWidth = node.role === "self" ? 2.4 : 1.6;
+      context.stroke();
+
+      context.save();
+      context.shadowColor = palette.glow;
+      context.shadowBlur = selectedId === node.id ? 18 : 10;
+      roundRectPath(context, left, top, metrics.width, metrics.height, metrics.radius);
+      context.strokeStyle = palette.border;
+      context.lineWidth = 1;
+      context.stroke();
+      context.restore();
+
+      drawServerGlyph(context, left, top, metrics.width, metrics.glyphHeight);
 
       if (selectedId === node.id) {
-        context.beginPath();
-        context.arc(point.x, point.y, radius + 4, 0, Math.PI * 2);
+        roundRectPath(context, left - 4, top - 4, metrics.width + 8, metrics.height + 8, metrics.radius + 4);
         context.strokeStyle = "#ffffff";
         context.lineWidth = 2;
         context.stroke();
@@ -139,23 +273,58 @@ export function CanvasGraph({
 
       if (node.exitNode || node.exitNodeOption) {
         context.beginPath();
-        context.arc(point.x + radius * 0.85, point.y - radius * 0.85, 6, 0, Math.PI * 2);
+        context.arc(left + metrics.width - 8, top + 8, 6, 0, Math.PI * 2);
         context.fillStyle = rootStyle.getPropertyValue("--accent").trim();
         context.fill();
       }
 
       if (node.subnetRouter) {
         context.beginPath();
-        context.arc(point.x - radius * 0.85, point.y - radius * 0.85, 6, 0, Math.PI * 2);
+        context.arc(left + 8, top + 8, 6, 0, Math.PI * 2);
         context.fillStyle = rootStyle.getPropertyValue("--router").trim();
         context.fill();
       }
 
-      context.fillStyle = "#e8ecf8";
-      context.font = "12px system-ui, sans-serif";
+      const visibleServices = getVisibleServices(node);
+      if (visibleServices.length > 0) {
+        let offsetY = top + metrics.glyphHeight + 6;
+        for (const service of visibleServices) {
+          const badge = serviceBadgeMetrics(service, viewport, width);
+          context.font = `600 ${badge.fontSize}px system-ui, sans-serif`;
+          const badgeX = left + 8;
+          const badgeWidth = metrics.width - 16;
+
+          roundRectPath(context, badgeX, offsetY, badgeWidth, badge.height, badge.radius);
+          context.fillStyle = "rgba(255,255,255,0.06)";
+          context.fill();
+          context.strokeStyle = palette.border;
+          context.lineWidth = 1;
+          context.stroke();
+
+          context.fillStyle = "#d7e2ff";
+          context.textAlign = "left";
+          context.textBaseline = "middle";
+          context.fillText(badge.text, badgeX + 10, offsetY + badge.height / 2);
+          context.textBaseline = "alphabetic";
+
+          serviceHitRegionsRef.current.push({
+            nodeId: node.id,
+            service,
+            x: badgeX,
+            y: offsetY,
+            width: badgeWidth,
+            height: badge.height,
+          });
+          offsetY += badge.height + 6;
+        }
+      }
+
+      context.fillStyle = "#f3f6ff";
+      const labelFontSize = Math.max(12, Math.round(15 * getCanvasDensityScale(width)));
+      context.font = `700 ${labelFontSize}px system-ui, sans-serif`;
       context.textAlign = "center";
       const label = node.name.length > 22 ? `${node.name.slice(0, 19)}...` : node.name;
-      context.fillText(label, point.x, point.y + radius + 16);
+      context.fillText(label, point.x, top + metrics.height + Math.max(18, 22 * getCanvasDensityScale(width)));
     }
   }, [filteredEdges, filteredNodes, graph.nodes, selectedId, viewport]);
 
@@ -172,6 +341,16 @@ export function CanvasGraph({
       onPointerDown={(event) => {
         const width = window.innerWidth;
         const height = window.innerHeight;
+        const serviceTarget = findServiceAtPoint(event.clientX, event.clientY);
+        if (serviceTarget) {
+          pointerStateRef.current.down = false;
+          pointerStateRef.current.moved = false;
+          pointerStateRef.current.dragStart = null;
+          pointerStateRef.current.last = null;
+          pointerStateRef.current.draggingNodeId = null;
+          onDragStateChange(null);
+          return;
+        }
         activePointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
         if (activePointersRef.current.size === 2) {
           const points = [...activePointersRef.current.values()];
@@ -270,6 +449,19 @@ export function CanvasGraph({
         }
         const width = window.innerWidth;
         const height = window.innerHeight;
+        const serviceTarget = findServiceAtPoint(event.clientX, event.clientY);
+        if (serviceTarget && !pointerStateRef.current.moved) {
+          const node = graph.nodes.find((candidate) => candidate.id === serviceTarget.nodeId);
+          if (node) {
+            window.open(buildServiceUrl(node, serviceTarget.service), "_blank", "noopener,noreferrer");
+            onSelect(node.id);
+          }
+          pointerStateRef.current.down = false;
+          pointerStateRef.current.draggingNodeId = null;
+          pointerStateRef.current.last = null;
+          onDragStateChange(null);
+          return;
+        }
         if (!pointerStateRef.current.moved) {
           const node = findNodeAtPoint(event.clientX, event.clientY, width, height);
           onSelect(node?.id ?? null);
