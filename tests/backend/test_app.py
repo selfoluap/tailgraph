@@ -91,6 +91,8 @@ def test_config_json_round_trip(tmp_path):
             "viewId": "view2",
             "nodes": {"peer1": {"x": 12, "y": -8.5}},
             "viewport": {"x": 5, "y": 7, "scale": 1.25},
+            "showConnections": False,
+            "showGrid": True,
         }
     )
     loaded = route_endpoint(router, "/config.json", method="GET")()
@@ -99,7 +101,11 @@ def test_config_json_round_trip(tmp_path):
     assert saved["config"]["activeView"] == "view2"
     assert saved["config"]["nodes"] == {"peer1": {"x": 12.0, "y": -8.5}}
     assert saved["config"]["viewport"] == {"x": 5.0, "y": 7.0, "scale": 1.25}
+    assert saved["config"]["showConnections"] is False
+    assert saved["config"]["showGrid"] is True
     assert saved["config"]["views"]["view2"]["nodes"] == {"peer1": {"x": 12.0, "y": -8.5}}
+    assert saved["config"]["views"]["view2"]["showConnections"] is False
+    assert saved["config"]["views"]["view2"]["showGrid"] is True
     assert isinstance(saved["config"]["updatedAt"], int)
     assert loaded == saved["config"]
 

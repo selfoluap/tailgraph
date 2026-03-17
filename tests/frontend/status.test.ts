@@ -34,11 +34,19 @@ describe("fetchStatus", () => {
         json: async () => ({
           activeView: "view2",
           views: {
-            view1: { nodes: {}, viewport: null, updatedAt: null },
-            view2: { nodes: { peer1: { x: 1, y: 2 } }, viewport: { x: 3, y: 4, scale: 1 }, updatedAt: 123 },
+            view1: { nodes: {}, viewport: null, showConnections: true, showGrid: false, updatedAt: null },
+            view2: {
+              nodes: { peer1: { x: 1, y: 2 } },
+              viewport: { x: 3, y: 4, scale: 1 },
+              showConnections: false,
+              showGrid: true,
+              updatedAt: 123,
+            },
           },
           nodes: { peer1: { x: 1, y: 2 } },
           viewport: { x: 3, y: 4, scale: 1 },
+          showConnections: false,
+          showGrid: true,
           updatedAt: 123,
         }),
       })
@@ -49,15 +57,19 @@ describe("fetchStatus", () => {
           config: {
             activeView: "view2",
             views: {
-              view1: { nodes: {}, viewport: null, updatedAt: null },
+              view1: { nodes: {}, viewport: null, showConnections: true, showGrid: false, updatedAt: null },
               view2: {
                 nodes: { peer1: { x: 5, y: 6 } },
                 viewport: { x: 7, y: 8, scale: 1.25 },
+                showConnections: false,
+                showGrid: true,
                 updatedAt: 124,
               },
             },
             nodes: { peer1: { x: 5, y: 6 } },
             viewport: { x: 7, y: 8, scale: 1.25 },
+            showConnections: false,
+            showGrid: true,
             updatedAt: 124,
           },
         }),
@@ -66,7 +78,13 @@ describe("fetchStatus", () => {
 
     const { fetchGraphConfig, saveGraphConfig } = await import("../../frontend/src/api/status");
     await fetchGraphConfig();
-    await saveGraphConfig({ peer1: { x: 5, y: 6 } }, { x: 7, y: 8, scale: 1.25 }, "view2");
+    await saveGraphConfig(
+      { peer1: { x: 5, y: 6 } },
+      { x: 7, y: 8, scale: 1.25 },
+      "view2",
+      false,
+      true,
+    );
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, "https://api.example.test/config.json", {
       cache: "no-store",
@@ -80,6 +98,8 @@ describe("fetchStatus", () => {
         viewId: "view2",
         nodes: { peer1: { x: 5, y: 6 } },
         viewport: { x: 7, y: 8, scale: 1.25 },
+        showConnections: false,
+        showGrid: true,
       }),
     });
   });

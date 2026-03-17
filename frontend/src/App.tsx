@@ -15,6 +15,7 @@ import { RightSidebar } from "./components/RightSidebar";
 import { TopBar } from "./components/TopBar";
 import { buildGraphFromStatus } from "./graph/buildGraph";
 import { filterNodes } from "./graph/filterNodes";
+import { moveNodeToNearestGridCell, snapNodesToGrid } from "./graph/grid";
 import { orderNodesByGroups } from "./graph/orderNodes";
 import { useAutoRefresh } from "./hooks/useAutoRefresh";
 import type { FiltersState, GraphData, GraphNode, NodePositionMap, ViewportState } from "./types/graph";
@@ -39,7 +40,7 @@ const defaultViewport: ViewportState = { x: 0, y: 0, scale: 1 };
 const viewIds = ["view1", "view2", "view3", "view4", "view5"] as const;
 
 function emptyLayoutConfig(): LayoutConfig {
-  return { nodes: {}, viewport: null, updatedAt: null };
+  return { nodes: {}, viewport: null, showConnections: true, showGrid: false, updatedAt: null };
 }
 
 function normalizeViews(views?: Record<string, LayoutConfig>): Record<string, LayoutConfig> {
@@ -55,7 +56,7 @@ function applyPositions(
 ): GraphData {
   const currentNodeMap = currentNodes ? new Map(currentNodes.map((node) => [node.id, node])) : null;
 
-  return {
+  const nextGraph = {
     ...graph,
     nodes: graph.nodes.map((node) => {
       const current = currentNodeMap?.get(node.id);
@@ -83,6 +84,11 @@ function applyPositions(
       };
     }),
   };
+
+  return {
+    ...nextGraph,
+    nodes: snapNodesToGrid(nextGraph.nodes),
+  };
 }
 
 function positionsFromNodes(nodes: GraphNode[]): NodePositionMap {
@@ -101,6 +107,10 @@ function positionsEqual(a: NodePositionMap, b: NodePositionMap): boolean {
 
 function viewportEqual(a: ViewportState, b: ViewportState): boolean {
   return a.x === b.x && a.y === b.y && a.scale === b.scale;
+}
+
+function connectionsEqual(a: boolean, b: boolean): boolean {
+  return a === b;
 }
 
 function groupsEqual(a: Record<string, string[]>, b: Record<string, string[]>): boolean {
@@ -147,11 +157,15 @@ export default function App() {
   const [isSwitchingView, setIsSwitchingView] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(() => window.innerWidth >= 900);
+  const [showConnections, setShowConnections] = useState(true);
+  const [showGrid, setShowGrid] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveMessage, setSaveMessage] = useState("");
   const graphRef = useRef(graph);
   const activeViewRef = useRef(activeView);
+  const showConnectionsRef = useRef(showConnections);
+  const showGridRef = useRef(showGrid);
   const viewportRef = useRef(viewport);
   const viewConfigsRef = useRef<Record<string, LayoutConfig>>(normalizeViews());
   const persistedViewConfigsRef = useRef<Record<string, LayoutConfig>>(normalizeViews());
@@ -165,6 +179,14 @@ export default function App() {
   useEffect(() => {
     activeViewRef.current = activeView;
   }, [activeView]);
+
+  useEffect(() => {
+    showConnectionsRef.current = showConnections;
+  }, [showConnections]);
+
+  useEffect(() => {
+    showGridRef.current = showGrid;
+  }, [showGrid]);
 
   useEffect(() => {
     viewportRef.current = viewport;
@@ -195,6 +217,8 @@ export default function App() {
     setActiveView(viewId);
     setGraph(applyPositions(nextGraph, nextConfig.nodes));
     setViewport(nextConfig.viewport ?? defaultViewport);
+    setShowConnections(nextConfig.showConnections);
+    setShowGrid(nextConfig.showGrid);
     setError(status.error || null);
   }, []);
 
@@ -221,6 +245,8 @@ export default function App() {
         ...(viewConfigsRef.current[currentViewId] ?? emptyLayoutConfig()),
         nodes: positionsFromNodes(graphRef.current.nodes),
         viewport: viewportRef.current,
+        showConnections: showConnectionsRef.current,
+        showGrid: showGridRef.current,
       },
     };
   }, []);
@@ -282,6 +308,8 @@ export default function App() {
     if (
       positionsEqual(nextPositions, persistedConfig.nodes) &&
       viewportEqual(nextViewport, persistedConfig.viewport ?? defaultViewport) &&
+      connectionsEqual(showConnectionsRef.current, persistedConfig.showConnections) &&
+      connectionsEqual(showGridRef.current, persistedConfig.showGrid) &&
       groupsEqual(deviceGroups, persistedGroupsRef.current)
     ) {
       setSaveState("saved");
@@ -294,7 +322,13 @@ export default function App() {
 
     try {
       const [configResult, groupsResult] = await Promise.all([
-        saveGraphConfig(nextPositions, nextViewport, currentViewId),
+        saveGraphConfig(
+          nextPositions,
+          nextViewport,
+          currentViewId,
+          showConnectionsRef.current,
+          showGridRef.current,
+        ),
         saveDeviceGroups(deviceGroups),
       ]);
       if (!configResult.ok || !groupsResult.ok) {
@@ -335,6 +369,8 @@ export default function App() {
     if (
       positionsEqual(currentPositions, persistedConfig.nodes) &&
       viewportEqual(viewport, persistedConfig.viewport ?? defaultViewport) &&
+      connectionsEqual(showConnections, persistedConfig.showConnections) &&
+      connectionsEqual(showGrid, persistedConfig.showGrid) &&
       groupsEqual(deviceGroups, persistedGroupsRef.current)
     ) {
       if (saveState !== "saving" && saveState !== "saved") {
@@ -346,7 +382,7 @@ export default function App() {
     if (saveState !== "saving") {
       setSaveState("idle");
     }
-  }, [currentPositions, deviceGroups, saveState, viewport]);
+  }, [currentPositions, deviceGroups, saveState, showConnections, showGrid, viewport]);
 
   return (
     <div id="app">
@@ -355,15 +391,15 @@ export default function App() {
           graph={isSwitchingView ? emptyGraph : graph}
           filters={filters}
           selectedId={selectedId}
+          showConnections={showConnections}
+          showGrid={showGrid}
           viewport={viewport}
           onViewportChange={setViewport}
           onSelect={setSelectedId}
           onDragNode={(nodeId, x, y) => {
             setGraph((current) => ({
               ...current,
-              nodes: current.nodes.map((node) =>
-                node.id === nodeId ? { ...node, x, y, vx: 0, vy: 0 } : node,
-              ),
+              nodes: moveNodeToNearestGridCell(current.nodes, nodeId, x, y),
             }));
           }}
           onDragStateChange={() => {}}
@@ -481,10 +517,22 @@ export default function App() {
 
       {isDesktop ? (
         <RightSidebar
+          showConnections={showConnections}
+          showGrid={showGrid}
+          onToggleConnections={() => {
+            setShowConnections((current) => !current);
+            setSaveState("idle");
+            setSaveMessage("");
+          }}
+          onToggleGrid={() => {
+            setShowGrid((current) => !current);
+            setSaveState("idle");
+            setSaveMessage("");
+          }}
           onOrderByGroups={() => {
             setGraph((current) => ({
               ...current,
-              nodes: orderNodesByGroups(current.nodes),
+              nodes: snapNodesToGrid(orderNodesByGroups(current.nodes)),
             }));
             setSaveState("idle");
             setSaveMessage("");

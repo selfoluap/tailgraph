@@ -418,6 +418,10 @@ select {
   backdrop-filter: blur(8px);
 }
 
+.sidebarCardStack {
+  margin-top: 10px;
+}
+
 .sidebarActionButton {
   width: 100%;
   margin: 0;

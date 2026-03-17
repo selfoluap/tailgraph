@@ -6,6 +6,8 @@ const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/$
 export interface LayoutConfig {
   nodes: NodePositionMap;
   viewport: { x: number; y: number; scale: number } | null;
+  showConnections: boolean;
+  showGrid: boolean;
   updatedAt: number | null;
 }
 
@@ -38,13 +40,15 @@ export async function saveGraphConfig(
   nodes: NodePositionMap,
   viewport: { x: number; y: number; scale: number },
   viewId: string,
+  showConnections: boolean,
+  showGrid: boolean,
 ): Promise<{ ok: boolean; config: LayoutConfigResponse }> {
   const response = await fetch(`${apiBaseUrl}/config.json`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ viewId, nodes, viewport }),
+    body: JSON.stringify({ viewId, nodes, viewport, showConnections, showGrid }),
   });
   if (!response.ok) {
     throw new Error(`config save failed: ${response.status}`);

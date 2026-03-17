@@ -38,8 +38,26 @@ def _coerce_nodes(raw_nodes: object) -> dict[str, dict[str, float]]:
     return nodes
 
 
+def _coerce_show_connections(raw_show_connections: object) -> bool:
+    if isinstance(raw_show_connections, bool):
+        return raw_show_connections
+    return True
+
+
+def _coerce_show_grid(raw_show_grid: object) -> bool:
+    if isinstance(raw_show_grid, bool):
+        return raw_show_grid
+    return False
+
+
 def _empty_layout() -> dict:
-    return {"nodes": {}, "viewport": None, "updatedAt": None}
+    return {
+        "nodes": {},
+        "viewport": None,
+        "showConnections": True,
+        "showGrid": False,
+        "updatedAt": None,
+    }
 
 
 def _view_key(index: int) -> str:
@@ -63,6 +81,8 @@ def _coerce_layout(raw_layout: object) -> dict:
     return {
         "nodes": _coerce_nodes(raw_layout.get("nodes")),
         "viewport": _coerce_viewport(raw_layout.get("viewport")),
+        "showConnections": _coerce_show_connections(raw_layout.get("showConnections")),
+        "showGrid": _coerce_show_grid(raw_layout.get("showGrid")),
         "updatedAt": updated_at,
     }
 
@@ -93,17 +113,28 @@ class LayoutStore:
         nodes: dict[str, dict[str, float]],
         viewport: dict[str, float] | None = None,
         view_id: str = DEFAULT_LAYOUT_VIEW,
+        show_connections: bool | None = None,
+        show_grid: bool | None = None,
     ) -> dict:
         normalized_view_id = _normalize_view_id(view_id)
-        next_layout = {
-            "nodes": _coerce_nodes(nodes),
-            "viewport": _coerce_viewport(viewport),
-            "updatedAt": int(time.time()),
-        }
 
         with self._lock:
             existing = self._read_unlocked()
             existing_views = _coerce_views(existing.get("views"))
+            existing_layout = existing_views.get(normalized_view_id) or _empty_layout()
+            next_layout = {
+                "nodes": _coerce_nodes(nodes),
+                "viewport": _coerce_viewport(viewport),
+                "showConnections": (
+                    existing_layout["showConnections"]
+                    if show_connections is None
+                    else _coerce_show_connections(show_connections)
+                ),
+                "showGrid": (
+                    existing_layout["showGrid"] if show_grid is None else _coerce_show_grid(show_grid)
+                ),
+                "updatedAt": int(time.time()),
+            }
             existing_views[normalized_view_id] = next_layout
             payload = {
                 "activeView": normalized_view_id,
@@ -141,5 +172,7 @@ class LayoutStore:
             "views": views,
             "nodes": active_layout["nodes"],
             "viewport": active_layout["viewport"],
+            "showConnections": active_layout["showConnections"],
+            "showGrid": active_layout["showGrid"],
             "updatedAt": active_layout["updatedAt"],
         }

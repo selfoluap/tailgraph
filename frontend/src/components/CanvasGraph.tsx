@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { buildServiceUrl } from "../graph/serviceLinks";
 import { statusText } from "../graph/buildGraph";
 import { filterEdges, filterNodes } from "../graph/filterNodes";
+import { NODE_GRID_SIZE } from "../graph/grid";
 import { clampScale, screenToWorld, worldToScreen } from "../graph/viewport";
 import type { FiltersState, GraphData, GraphNode, GraphService, ViewportState } from "../types/graph";
 
@@ -10,6 +11,8 @@ interface CanvasGraphProps {
   graph: GraphData;
   filters: FiltersState;
   selectedId: string | null;
+  showConnections: boolean;
+  showGrid: boolean;
   viewport: ViewportState;
   onViewportChange: (next: ViewportState) => void;
   onSelect: (nodeId: string | null) => void;
@@ -26,6 +29,8 @@ interface ServiceHitRegion {
   height: number;
 }
 
+const COMPACT_NODE_SCALE_THRESHOLD = 0.7;
+
 export function getCanvasDensityScale(screenWidth: number) {
   if (screenWidth < 480) {
     return 0.82;
@@ -34,6 +39,10 @@ export function getCanvasDensityScale(screenWidth: number) {
     return 0.9;
   }
   return 1;
+}
+
+export function getNodeRenderMode(scale: number) {
+  return scale < COMPACT_NODE_SCALE_THRESHOLD ? "compact" : "card";
 }
 
 function roundRectPath(
@@ -87,12 +96,13 @@ function nodePalette(rootStyle: CSSStyleDeclaration, node: GraphNode) {
     accent,
     border: node.id === "self" ? "rgba(96,165,250,0.95)" : accent,
     fill: node.id === "self" ? "rgba(18,34,68,0.95)" : "rgba(12,18,36,0.94)",
+    compactFill: node.id === "self" ? "rgba(18,34,68,0.98)" : "rgba(12,18,36,0.98)",
     glow: `${accent}33`,
   };
 }
 
-function getNodeCardMetrics(node: GraphNode, viewport: ViewportState, screenWidth: number) {
-  const scale = Math.max(0.95, Math.min(1.35, viewport.scale)) * getCanvasDensityScale(screenWidth);
+function getNodeCardMetrics(node: GraphNode, screenWidth: number) {
+  const scale = getCanvasDensityScale(screenWidth);
   const services = getVisibleServices(node);
   const width = 108 * scale;
   const glyphHeight = 34 * scale;
@@ -106,14 +116,23 @@ function serviceBadgeText(service: GraphService): string {
   return `${service.label} ${service.port}`;
 }
 
-function serviceBadgeMetrics(service: GraphService, viewport: ViewportState, screenWidth: number) {
-  const scale = Math.max(0.9, Math.min(1.2, viewport.scale)) * getCanvasDensityScale(screenWidth);
+function serviceBadgeMetrics(service: GraphService, screenWidth: number) {
+  const scale = getCanvasDensityScale(screenWidth);
   const fontSize = Math.max(10, Math.round(11 * scale));
-  const paddingX = 8 * scale;
   const height = 20 * scale;
   const radius = 10 * scale;
   const text = serviceBadgeText(service);
-  return { fontSize, paddingX, height, radius, text };
+  return { fontSize, height, radius, text };
+}
+
+function compactNodeMetrics(screenWidth: number) {
+  const scale = getCanvasDensityScale(screenWidth);
+  const radius = 10 * scale;
+  return {
+    radius,
+    hitRadius: radius + 8,
+    labelFontSize: Math.max(10, Math.round(12 * scale)),
+  };
 }
 
 function nodeColor(rootStyle: CSSStyleDeclaration, node: GraphNode): string {
@@ -133,6 +152,8 @@ export function CanvasGraph({
   graph,
   filters,
   selectedId,
+  showConnections,
+  showGrid,
   viewport,
   onViewportChange,
   onSelect,
@@ -169,10 +190,22 @@ export function CanvasGraph({
   }, [viewport]);
 
   function findNodeAtPoint(clientX: number, clientY: number, width: number, height: number) {
+    const renderMode = getNodeRenderMode(viewport.scale);
     for (let index = filteredNodes.length - 1; index >= 0; index -= 1) {
       const node = filteredNodes[index];
       const point = worldToScreen(node.x, node.y, viewport, width, height);
-      const metrics = getNodeCardMetrics(node, viewport, width);
+      if (renderMode === "compact") {
+        const metrics = compactNodeMetrics(width);
+        const left = point.x - metrics.hitRadius;
+        const right = point.x + metrics.hitRadius;
+        const top = point.y - metrics.hitRadius;
+        const bottom = point.y + metrics.hitRadius;
+        if (clientX >= left && clientX <= right && clientY >= top && clientY <= bottom) {
+          return node;
+        }
+        continue;
+      }
+      const metrics = getNodeCardMetrics(node, width);
       const left = point.x - metrics.width / 2 - 8;
       const right = point.x + metrics.width / 2 + 8;
       const top = point.y - metrics.height / 2 - 8;
@@ -222,27 +255,95 @@ export function CanvasGraph({
     serviceHitRegionsRef.current = [];
 
     const rootStyle = getComputedStyle(document.documentElement);
+    const renderMode = getNodeRenderMode(viewport.scale);
 
-    for (const edge of filteredEdges) {
-      const source = graph.nodes.find((node) => node.id === edge.source);
-      const target = graph.nodes.find((node) => node.id === edge.target);
-      if (!source || !target) {
-        continue;
+    if (showGrid) {
+      const topLeft = screenToWorld(0, 0, viewport, width, height);
+      const bottomRight = screenToWorld(width, height, viewport, width, height);
+      const startCol = Math.floor(Math.min(topLeft.x, bottomRight.x) / NODE_GRID_SIZE) - 1;
+      const endCol = Math.ceil(Math.max(topLeft.x, bottomRight.x) / NODE_GRID_SIZE) + 1;
+      const startRow = Math.floor(Math.min(topLeft.y, bottomRight.y) / NODE_GRID_SIZE) - 1;
+      const endRow = Math.ceil(Math.max(topLeft.y, bottomRight.y) / NODE_GRID_SIZE) + 1;
+
+      context.save();
+      context.strokeStyle = "rgba(99, 115, 166, 0.18)";
+      context.lineWidth = 1;
+      for (let col = startCol; col <= endCol; col += 1) {
+        const x = worldToScreen(col * NODE_GRID_SIZE, 0, viewport, width, height).x;
+        context.beginPath();
+        context.moveTo(x, 0);
+        context.lineTo(x, height);
+        context.stroke();
       }
-      const a = worldToScreen(source.x, source.y, viewport, width, height);
-      const b = worldToScreen(target.x, target.y, viewport, width, height);
-      context.beginPath();
-      context.moveTo(a.x, a.y);
-      context.lineTo(b.x, b.y);
-      context.strokeStyle = "rgba(120,140,190,0.55)";
-      context.lineWidth = 1.2;
-      context.stroke();
+      for (let row = startRow; row <= endRow; row += 1) {
+        const y = worldToScreen(0, row * NODE_GRID_SIZE, viewport, width, height).y;
+        context.beginPath();
+        context.moveTo(0, y);
+        context.lineTo(width, y);
+        context.stroke();
+      }
+      context.restore();
+    }
+
+    if (showConnections) {
+      for (const edge of filteredEdges) {
+        const source = graph.nodes.find((node) => node.id === edge.source);
+        const target = graph.nodes.find((node) => node.id === edge.target);
+        if (!source || !target) {
+          continue;
+        }
+        const a = worldToScreen(source.x, source.y, viewport, width, height);
+        const b = worldToScreen(target.x, target.y, viewport, width, height);
+        context.beginPath();
+        context.moveTo(a.x, a.y);
+        context.lineTo(b.x, b.y);
+        context.strokeStyle = "rgba(120,140,190,0.55)";
+        context.lineWidth = 1.2;
+        context.stroke();
+      }
     }
 
     for (const node of filteredNodes) {
       const point = worldToScreen(node.x, node.y, viewport, width, height);
-      const metrics = getNodeCardMetrics(node, viewport, width);
       const palette = nodePalette(rootStyle, node);
+      if (renderMode === "compact") {
+        const metrics = compactNodeMetrics(width);
+
+        context.beginPath();
+        context.arc(point.x, point.y, metrics.radius, 0, Math.PI * 2);
+        context.fillStyle = palette.compactFill;
+        context.fill();
+        context.strokeStyle = palette.border;
+        context.lineWidth = node.role === "self" ? 2.2 : 1.6;
+        context.stroke();
+
+        context.save();
+        context.shadowColor = palette.glow;
+        context.shadowBlur = selectedId === node.id ? 16 : 8;
+        context.beginPath();
+        context.arc(point.x, point.y, metrics.radius, 0, Math.PI * 2);
+        context.strokeStyle = palette.border;
+        context.lineWidth = 1;
+        context.stroke();
+        context.restore();
+
+        if (selectedId === node.id) {
+          context.beginPath();
+          context.arc(point.x, point.y, metrics.radius + 5, 0, Math.PI * 2);
+          context.strokeStyle = "#ffffff";
+          context.lineWidth = 2;
+          context.stroke();
+        }
+
+        context.fillStyle = "#f3f6ff";
+        context.font = `700 ${metrics.labelFontSize}px system-ui, sans-serif`;
+        context.textAlign = "center";
+        const label = node.name.length > 14 ? `${node.name.slice(0, 11)}...` : node.name;
+        context.fillText(label, point.x, point.y + metrics.radius + 18);
+        continue;
+      }
+
+      const metrics = getNodeCardMetrics(node, width);
       const left = point.x - metrics.width / 2;
       const top = point.y - metrics.height / 2;
 
@@ -275,7 +376,7 @@ export function CanvasGraph({
       if (visibleServices.length > 0) {
         let offsetY = top + metrics.glyphHeight + 6;
         for (const service of visibleServices) {
-          const badge = serviceBadgeMetrics(service, viewport, width);
+          const badge = serviceBadgeMetrics(service, width);
           context.font = `600 ${badge.fontSize}px system-ui, sans-serif`;
           const badgeX = left + 8;
           const badgeWidth = metrics.width - 16;
@@ -312,7 +413,7 @@ export function CanvasGraph({
       const label = node.name.length > 22 ? `${node.name.slice(0, 19)}...` : node.name;
       context.fillText(label, point.x, top + metrics.height + Math.max(18, 22 * getCanvasDensityScale(width)));
     }
-  }, [filteredEdges, filteredNodes, graph.nodes, selectedId, viewport]);
+  }, [filteredEdges, filteredNodes, graph.nodes, selectedId, showConnections, showGrid, viewport]);
 
   useEffect(() => {
     const handleResize = () => onViewportChange({ ...viewport });

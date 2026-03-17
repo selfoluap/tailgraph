@@ -55,6 +55,8 @@ def build_api_router(
                 payload.get("nodes") or {},
                 payload.get("viewport"),
                 payload.get("viewId") or payload.get("activeView") or "view1",
+                payload.get("showConnections"),
+                payload.get("showGrid"),
             ),
         }
 
