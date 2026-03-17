@@ -19,10 +19,7 @@ describe("fetchStatus", () => {
     const { fetchStatus } = await import("../../frontend/src/api/status");
     await fetchStatus();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^https:\/\/api\.example\.test\/status\.json\?ts=\d+$/),
-      { cache: "no-store" },
-    );
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example.test/status.json");
   });
 
   it("loads and saves graph configs with view ids", async () => {

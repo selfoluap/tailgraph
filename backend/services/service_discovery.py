@@ -43,6 +43,22 @@ class ServiceScanner:
     ports: tuple[int, ...] = DEFAULT_DISCOVERY_PORTS
     timeout_ms: int = 250
 
+    def pending_status(self) -> dict[str, Any]:
+        return {
+            "self": [],
+            "peers": {},
+            "meta": {
+                "enabled": True,
+                "status": "pending",
+                "ports": list(self.ports),
+                "scannedAt": "",
+                "durationMs": 0,
+                "timeoutMs": self.timeout_ms,
+                "stale": False,
+                "skippedNodes": [],
+            },
+        }
+
     def scan_status(self, status: dict[str, Any]) -> dict[str, Any]:
         started_at = time.time()
         generated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(started_at))

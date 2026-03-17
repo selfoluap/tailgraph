@@ -152,6 +152,25 @@ describe("DetailsPanel", () => {
     expect(screen.getByText("no configured service ports reachable")).toBeInTheDocument();
   });
 
+  it("shows pending service discovery state", () => {
+    render(
+      React.createElement(DetailsPanel, {
+        node: makeNode({
+          services: [],
+          servicesScannedAt: "",
+          servicesStatus: "pending",
+        }),
+        onClose: () => {},
+        onAddGroup: () => {},
+        onRemoveGroup: () => {},
+      }),
+    );
+
+    expect(screen.getByText("service discovery pending")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Expand details" }));
+    expect(screen.getByText("pending")).toBeInTheDocument();
+  });
+
   it("uses https links for secure service ports", () => {
     render(
       React.createElement(DetailsPanel, {

@@ -1,4 +1,5 @@
-from backend.api.routes import merge_service_discovery
+from backend.api.routes import merge_service_discovery, resolve_service_discovery
+from backend.services.cache import BackgroundRefreshCache
 from backend.services.service_discovery import (
     DEFAULT_DISCOVERY_PORTS,
     PORT_LABELS,
@@ -69,3 +70,24 @@ def test_merge_service_discovery_attaches_metadata_and_peer_services():
     assert merged["_meta"]["serviceDiscovery"]["status"] == "ready"
     assert merged["Self"]["DiscoveredServices"][0]["port"] == 5173
     assert merged["Peer"]["peer1"]["DiscoveredServices"][0]["port"] == 8000
+
+
+def test_resolve_service_discovery_marks_stale_cache_and_schedules_refresh():
+    cache = BackgroundRefreshCache(ttl_seconds=0)
+    cache._cached_value = {  # type: ignore[attr-defined]
+        "self": [],
+        "peers": {},
+        "meta": {"status": "ready", "ports": [8000]},
+    }
+    cache._cached_at = 0  # type: ignore[attr-defined]
+    cache._has_value = True  # type: ignore[attr-defined]
+    scanner = ServiceScanner(enabled=True, ports=(8000,), timeout_ms=50)
+    scheduled = {"count": 0}
+
+    cache.refresh_in_background = lambda fetcher: scheduled.__setitem__("count", scheduled["count"] + 1) or True  # type: ignore[method-assign]
+
+    payload = resolve_service_discovery({"Self": {}, "Peer": {}}, cache, scanner)
+
+    assert scheduled["count"] == 1
+    assert payload["meta"]["status"] == "ready"
+    assert payload["meta"]["stale"] is True

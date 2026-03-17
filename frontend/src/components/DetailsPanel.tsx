@@ -145,6 +145,9 @@ function serviceEmptyState(node: GraphNode): string {
   if (node.servicesStatus === "disabled") {
     return "service discovery disabled";
   }
+  if (node.servicesStatus === "pending") {
+    return "service discovery pending";
+  }
   return "no configured service ports reachable";
 }
 
@@ -153,7 +156,13 @@ function formatServiceScan(node: GraphNode): string {
     return node.servicesError;
   }
   if (!node.servicesScannedAt) {
-    return node.servicesStatus === "disabled" ? "disabled" : "n/a";
+    if (node.servicesStatus === "disabled") {
+      return "disabled";
+    }
+    if (node.servicesStatus === "pending") {
+      return "pending";
+    }
+    return "n/a";
   }
   return formatAbsoluteOrRelativeTime(node.servicesScannedAt);
 }

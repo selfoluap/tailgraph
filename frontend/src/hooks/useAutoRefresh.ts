@@ -1,14 +1,10 @@
 import { useEffect } from "react";
 
-export function useAutoRefresh(enabled: boolean, refresh: () => Promise<void>, intervalMs = 10000) {
+export function useAutoRefresh(enabled: boolean, refresh: () => Promise<void>, intervalMs = 300000) {
   useEffect(() => {
     if (!enabled) {
       return undefined;
     }
-
-    refresh().catch((error: unknown) => {
-      console.error(error);
-    });
 
     const timer = window.setInterval(() => {
       refresh().catch((error: unknown) => {

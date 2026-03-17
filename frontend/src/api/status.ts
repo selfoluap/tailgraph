@@ -17,9 +17,7 @@ export interface LayoutConfigResponse extends LayoutConfig {
 }
 
 export async function fetchStatus(): Promise<TailscaleStatus> {
-  const response = await fetch(`${apiBaseUrl}/status.json?ts=${Date.now()}`, {
-    cache: "no-store",
-  });
+  const response = await fetch(`${apiBaseUrl}/status.json`);
   if (!response.ok) {
     throw new Error(`status request failed: ${response.status}`);
   }

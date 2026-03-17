@@ -74,6 +74,23 @@ class BackgroundRefreshCache:
             self._refreshing = False
         return value
 
+    def get_cached(self) -> tuple[T | None, bool]:
+        with self._lock:
+            if not self._has_value:
+                return None, False
+            is_fresh = (time.time() - self._cached_at) < self.ttl_seconds
+            return self._cached_value, is_fresh
+
+    def refresh_in_background(self, fetcher: Callable[[], T]) -> bool:
+        with self._lock:
+            if self._refreshing:
+                return False
+            self._refreshing = True
+
+        thread = threading.Thread(target=self._refresh, args=(fetcher,), daemon=True)
+        thread.start()
+        return True
+
     def _refresh(self, fetcher: Callable[[], T]) -> None:
         try:
             value = fetcher()

@@ -49,10 +49,38 @@ def test_status_json_success():
     payload = route_endpoint(router, "/status.json")(response)
 
     assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "private, max-age=2"
     assert payload["_meta"]["generatedAtISO"] == "now"
     assert payload["_meta"]["serviceDiscovery"]["status"] == "disabled"
     assert payload["Self"]["DiscoveredServices"] == []
     assert payload["Self"]["Groups"] == ["Production"]
+
+
+def test_status_json_returns_pending_service_discovery_without_blocking():
+    cache = StatusCache()
+    service_discovery_cache = BackgroundRefreshCache(ttl_seconds=60)
+    layout_store = LayoutStore("/tmp/test-config-status-pending.json")
+    group_store = GroupStore("/tmp/test-groups-status-pending.json")
+    tailscale = TailscaleService()
+    service_scanner = ServiceScanner(enabled=True, ports=(8000,), timeout_ms=50)
+    scheduled = {"count": 0}
+
+    tailscale.fetch_status = lambda: {  # type: ignore[method-assign]
+        "Self": {"HostName": "alpha"},
+        "Peer": {},
+        "_meta": {"generatedAtISO": "now"},
+    }
+    service_scanner.scan_status = lambda status: (_ for _ in ()).throw(AssertionError("inline scan"))  # type: ignore[method-assign]
+    service_discovery_cache.refresh_in_background = lambda fetcher: scheduled.__setitem__("count", scheduled["count"] + 1) or True  # type: ignore[method-assign]
+    router = build_api_router(cache, service_discovery_cache, layout_store, group_store, tailscale, service_scanner)
+    response = Response()
+
+    payload = route_endpoint(router, "/status.json")(response)
+
+    assert response.status_code == 200
+    assert scheduled["count"] == 1
+    assert payload["_meta"]["serviceDiscovery"]["status"] == "pending"
+    assert payload["Self"]["DiscoveredServices"] == []
 
 
 def test_status_json_error():

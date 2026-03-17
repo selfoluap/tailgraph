@@ -49,6 +49,22 @@ function normalizeViews(views?: Record<string, LayoutConfig>): Record<string, La
   ) as Record<string, LayoutConfig>;
 }
 
+function mergeDeviceGroups(graph: GraphData, deviceGroups: Record<string, string[]>): GraphData {
+  const nodes = graph.nodes.map((node) => {
+    const nextGroups = node.hostname ? (deviceGroups[node.hostname] ?? []) : node.groups;
+    return {
+      ...node,
+      groups: nextGroups,
+    };
+  });
+
+  return {
+    ...graph,
+    nodes,
+    allGroups: [...new Set(nodes.flatMap((node) => node.groups))].sort(),
+  };
+}
+
 function applyPositions(
   graph: GraphData,
   persistedPositions: NodePositionMap,
@@ -162,6 +178,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveMessage, setSaveMessage] = useState("");
+  const baseGraphRef = useRef<GraphData>(emptyGraph);
+  const deviceGroupsRef = useRef(deviceGroups);
   const graphRef = useRef(graph);
   const activeViewRef = useRef(activeView);
   const showConnectionsRef = useRef(showConnections);
@@ -175,6 +193,10 @@ export default function App() {
   useEffect(() => {
     graphRef.current = graph;
   }, [graph]);
+
+  useEffect(() => {
+    deviceGroupsRef.current = deviceGroups;
+  }, [deviceGroups]);
 
   useEffect(() => {
     activeViewRef.current = activeView;
@@ -208,34 +230,36 @@ export default function App() {
     setSheetOpen(isDesktop);
   }, [isDesktop]);
 
-  const loadView = useCallback(async (viewId: string) => {
-    const status = await fetchStatus();
-    const nextGraph = buildGraphFromStatus(status);
+  const graphForView = useCallback(
+    (viewId: string, currentNodes?: GraphNode[]) => {
+      const nextGraph = mergeDeviceGroups(baseGraphRef.current, deviceGroupsRef.current);
+      const nextConfig = viewConfigsRef.current[viewId] ?? emptyLayoutConfig();
+      return applyPositions(nextGraph, nextConfig.nodes, currentNodes);
+    },
+    [],
+  );
+
+  const activateView = useCallback((viewId: string) => {
     const nextConfig = viewConfigsRef.current[viewId] ?? emptyLayoutConfig();
 
     activeViewRef.current = viewId;
     setActiveView(viewId);
-    setGraph(applyPositions(nextGraph, nextConfig.nodes));
+    setGraph(graphForView(viewId));
     setViewport(nextConfig.viewport ?? defaultViewport);
     setShowConnections(nextConfig.showConnections);
     setShowGrid(nextConfig.showGrid);
-    setError(status.error || null);
-  }, []);
+  }, [graphForView]);
 
   const refreshStatus = useCallback(async (keepPositions = true) => {
     const status = await fetchStatus();
-    const nextGraph = buildGraphFromStatus(status);
-    const activeConfig = viewConfigsRef.current[activeViewRef.current] ?? emptyLayoutConfig();
+    baseGraphRef.current = buildGraphFromStatus(status);
 
-    setGraph((current) => {
-      return applyPositions(
-        nextGraph,
-        activeConfig.nodes,
-        keepPositions ? current.nodes : undefined,
-      );
-    });
+    setGraph((current) => graphForView(
+      activeViewRef.current,
+      keepPositions ? current.nodes : undefined,
+    ));
     setError(status.error || null);
-  }, []);
+  }, [graphForView]);
 
   const snapshotActiveView = useCallback(() => {
     const currentViewId = activeViewRef.current;
@@ -268,11 +292,18 @@ export default function App() {
         viewConfigsRef.current = nextViews;
         persistedViewConfigsRef.current = nextViews;
         persistedGroupsRef.current = groups.groups || {};
+        deviceGroupsRef.current = groups.groups || {};
         setDeviceGroups(groups.groups || {});
       } catch (caught) {
         console.error(caught);
       }
-      await loadView(nextActiveView);
+      activeViewRef.current = nextActiveView;
+      setActiveView(nextActiveView);
+      const nextConfig = viewConfigsRef.current[nextActiveView] ?? emptyLayoutConfig();
+      setViewport(nextConfig.viewport ?? defaultViewport);
+      setShowConnections(nextConfig.showConnections);
+      setShowGrid(nextConfig.showGrid);
+      await refreshStatus(false);
     }
 
     bootstrap().catch((caught: unknown) => {
@@ -284,11 +315,11 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [loadView]);
+  }, [refreshStatus]);
 
   useAutoRefresh(autoRefresh, async () => {
     await refreshStatus(true);
-  });
+  }, 300000);
 
   const selectedNode = graph.nodes.find((node) => node.id === selectedId) || null;
   const filteredPeers = useMemo(
@@ -341,7 +372,6 @@ export default function App() {
       viewConfigsRef.current = savedViews;
       persistedViewConfigsRef.current = savedViews;
       persistedGroupsRef.current = groupsResult.groups.groups;
-      await refreshStatus(true);
       setSaveState("saved");
       setSaveMessage(`View ${currentViewId.slice(-1)} and groups saved`);
     } catch (caught) {
@@ -349,17 +379,11 @@ export default function App() {
       setSaveState("error");
       setSaveMessage("Save failed");
     }
-  }, [deviceGroups, refreshStatus, snapshotActiveView]);
+  }, [deviceGroups, snapshotActiveView]);
 
   useEffect(() => {
-    setGraph((current) => ({
-      ...current,
-      nodes: current.nodes.map((node) => ({
-        ...node,
-        groups: deviceGroups[node.hostname] || node.groups,
-      })),
-      allGroups: [...new Set(Object.values(deviceGroups).flat())].sort(),
-    }));
+    deviceGroupsRef.current = deviceGroups;
+    setGraph((current) => mergeDeviceGroups(current, deviceGroups));
   }, [deviceGroups]);
 
   const currentPositions = useMemo(() => positionsFromNodes(graph.nodes), [graph.nodes]);
@@ -431,7 +455,8 @@ export default function App() {
           setSaveState("idle");
           setSaveMessage("");
           setIsSwitchingView(true);
-          void loadView(viewId)
+          void Promise.resolve()
+            .then(() => activateView(viewId))
             .catch((caught) => {
               console.error(caught);
               setError(caught instanceof Error ? caught.message : "unknown error");

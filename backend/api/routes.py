@@ -25,11 +25,13 @@ def build_api_router(
     def get_status(response: Response) -> dict:
         try:
             payload = cache.get(tailscale.fetch_status)
-            payload = merge_service_discovery(
+            payload = merge_service_discovery(payload, resolve_service_discovery(
                 payload,
-                service_discovery_cache.get(lambda: service_scanner.scan_status(payload)),
-            )
+                service_discovery_cache,
+                service_scanner,
+            ))
             payload = merge_saved_groups(payload, group_store.load().get("groups") or {})
+            response.headers["Cache-Control"] = f"private, max-age={int(cache.ttl_seconds)}"
             response.status_code = 200
             return payload
         except Exception as exc:
@@ -72,6 +74,35 @@ def build_api_router(
         }
 
     return router
+
+
+def resolve_service_discovery(
+    payload: dict,
+    service_discovery_cache: BackgroundRefreshCache,
+    service_scanner: ServiceScanner,
+) -> dict:
+    if not service_scanner.enabled:
+        return service_scanner.scan_status(payload)
+
+    cached, is_fresh = service_discovery_cache.get_cached()
+    if cached is not None:
+        if not is_fresh:
+            service_discovery_cache.refresh_in_background(
+                lambda: service_scanner.scan_status(payload)
+            )
+            cached = mark_service_discovery_stale(cached)
+        return cached
+
+    service_discovery_cache.refresh_in_background(lambda: service_scanner.scan_status(payload))
+    return service_scanner.pending_status()
+
+
+def mark_service_discovery_stale(discovery: dict) -> dict:
+    marked = dict(discovery)
+    marked_meta = dict(marked.get("meta") or {})
+    marked_meta["stale"] = True
+    marked["meta"] = marked_meta
+    return marked
 
 
 def merge_service_discovery(payload: dict, discovery: dict) -> dict:
