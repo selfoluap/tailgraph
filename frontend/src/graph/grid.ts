@@ -1,6 +1,7 @@
 import type { GraphNode } from "../types/graph";
 
 export const NODE_GRID_SIZE = 35;
+export const MIN_NODE_DISTANCE = NODE_GRID_SIZE * 4;
 
 interface GridCell {
   col: number;
@@ -25,9 +26,16 @@ function cellKey(cell: GridCell): string {
   return `${cell.col},${cell.row}`;
 }
 
-function nearestAvailableCell(target: GridCell, occupied: Set<string>): GridCell {
-  const targetKey = cellKey(target);
-  if (!occupied.has(targetKey)) {
+function cellDistance(a: GridCell, b: GridCell): number {
+  return Math.hypot(a.col - b.col, a.row - b.row) * NODE_GRID_SIZE;
+}
+
+function isCellAvailable(target: GridCell, occupied: GridCell[]): boolean {
+  return occupied.every((cell) => cellDistance(target, cell) >= MIN_NODE_DISTANCE);
+}
+
+function nearestAvailableCell(target: GridCell, occupied: GridCell[]): GridCell {
+  if (isCellAvailable(target, occupied)) {
     return target;
   }
 
@@ -60,7 +68,7 @@ function nearestAvailableCell(target: GridCell, occupied: Set<string>): GridCell
     });
 
     for (const candidate of candidates) {
-      if (!occupied.has(cellKey(candidate))) {
+      if (isCellAvailable(candidate, occupied)) {
         return candidate;
       }
     }
@@ -75,11 +83,11 @@ export function snapNodePointToGrid(x: number, y: number) {
 
 export function snapNodesToGrid(nodes: GraphNode[]): GraphNode[] {
   const nextNodes = nodes.map((node) => ({ ...node, vx: 0, vy: 0 }));
-  const occupied = new Set<string>();
+  const occupied: GridCell[] = [];
 
   return nextNodes.map((node) => {
     const snappedCell = nearestAvailableCell(toGridCell(node.x, node.y), occupied);
-    occupied.add(cellKey(snappedCell));
+    occupied.push(snappedCell);
     return {
       ...node,
       ...fromGridCell(snappedCell),
@@ -94,14 +102,14 @@ export function moveNodeToNearestGridCell(
   y: number,
 ): GraphNode[] {
   const nextNodes = nodes.map((node) => ({ ...node }));
-  const occupied = new Set<string>();
+  const occupied: GridCell[] = [];
 
   for (const node of nextNodes) {
     if (node.id === nodeId) {
       continue;
     }
     const snappedCell = toGridCell(node.x, node.y);
-    occupied.add(cellKey(snappedCell));
+    occupied.push(snappedCell);
     const snapped = fromGridCell(snappedCell);
     node.x = snapped.x;
     node.y = snapped.y;

@@ -97,6 +97,18 @@ select {
   justify-content: flex-end;
 }
 
+.viewControlStack {
+  display: grid;
+  gap: 8px;
+}
+
+.viewtabsRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .chip,
 .toolbarbtn {
   background: var(--panel);
@@ -144,6 +156,16 @@ select {
 
 .viewtab {
   min-width: 68px;
+  justify-content: center;
+}
+
+.mobileLayoutMenu {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobileLayoutAction {
   justify-content: center;
 }
 
@@ -338,10 +360,52 @@ select {
   text-decoration: none;
 }
 
+.servicesSummary {
+  margin-bottom: 8px;
+  color: #fff3c4;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.servicesList {
+  display: grid;
+  gap: 8px;
+}
+
+.serviceCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.13), rgba(251, 191, 36, 0.07));
+}
+
+.serviceCardLabel {
+  min-width: 0;
+  font-weight: 700;
+  color: #fff8dc;
+  word-break: break-word;
+}
+
+.serviceCardMeta {
+  font-size: 12px;
+  color: #ffd978;
+  white-space: nowrap;
+}
+
+.servicesEmpty {
+  color: var(--muted);
+}
+
 .service-link:hover,
 .service-link:focus-visible {
-  border-color: var(--accent);
+  border-color: #fbbf24;
   outline: none;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(251, 191, 36, 0.12);
 }
 
 .badge.exit {
@@ -434,6 +498,10 @@ select {
   text-align: left;
 }
 
+.sidebarActionButtonSecondary {
+  margin-top: 8px;
+}
+
 #details.show {
   display: block;
 }
@@ -516,6 +584,15 @@ select {
     gap: 6px;
   }
 
+  .viewControlStack,
+  .mobileLayoutMenu {
+    width: 100%;
+  }
+
+  .mobileLayoutMenu {
+    grid-template-columns: 1fr;
+  }
+
   .viewtab {
     min-width: 60px;
   }
@@ -523,8 +600,13 @@ select {
   #sheet {
     border-top-left-radius: 16px;
     border-top-right-radius: 16px;
-    padding: 8px 12px calc(12px + env(safe-area-inset-bottom, 0));
-    min-height: 96px;
+    padding: 6px 12px calc(8px + env(safe-area-inset-bottom, 0));
+    min-height: 42px;
+  }
+
+  #sheet:not(.open) .sheetContent {
+    visibility: hidden;
+    pointer-events: none;
   }
 
   #search,

@@ -90,19 +90,29 @@ export function DetailsPanel({ node, onClose, onAddGroup, onRemoveGroup }: Detai
             <div className="k">Services</div>
             <div>
               {node.services.length > 0 ? (
-                  node.services.map((service) => (
+                <div className="servicesSummary">
+                  {node.services.length} reachable service{node.services.length === 1 ? "" : "s"}
+                </div>
+              ) : null}
+              {node.services.length > 0 ? (
+                <div className="servicesList">
+                  {node.services.map((service) => (
                     <a
-                      className="badge service-link"
+                      className="serviceCard service-link"
                       href={buildServiceUrl(node, service)}
                       key={`${service.protocol}-${service.port}`}
                       rel="noreferrer"
                       target="_blank"
-                  >
-                    {service.label} {service.port}/{service.protocol}
-                  </a>
-                ))
+                    >
+                      <span className="serviceCardLabel">{service.label}</span>
+                      <span className="serviceCardMeta">
+                        {service.port}/{service.protocol}
+                      </span>
+                    </a>
+                  ))}
+                </div>
               ) : (
-                <span>{serviceEmptyState(node)}</span>
+                <span className="servicesEmpty">{serviceEmptyState(node)}</span>
               )}
             </div>
           </div>

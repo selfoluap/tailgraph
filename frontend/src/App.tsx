@@ -16,7 +16,7 @@ import { TopBar } from "./components/TopBar";
 import { buildGraphFromStatus } from "./graph/buildGraph";
 import { filterNodes } from "./graph/filterNodes";
 import { moveNodeToNearestGridCell, snapNodesToGrid } from "./graph/grid";
-import { orderNodesByGroups } from "./graph/orderNodes";
+import { orderNodesByGroups, orderNodesInGrid } from "./graph/orderNodes";
 import { useAutoRefresh } from "./hooks/useAutoRefresh";
 import type { FiltersState, GraphData, GraphNode, NodePositionMap, ViewportState } from "./types/graph";
 
@@ -47,22 +47,6 @@ function normalizeViews(views?: Record<string, LayoutConfig>): Record<string, La
   return Object.fromEntries(
     viewIds.map((viewId) => [viewId, views?.[viewId] ?? emptyLayoutConfig()]),
   ) as Record<string, LayoutConfig>;
-}
-
-function mergeDeviceGroups(graph: GraphData, deviceGroups: Record<string, string[]>): GraphData {
-  const nodes = graph.nodes.map((node) => {
-    const nextGroups = node.hostname ? (deviceGroups[node.hostname] ?? []) : node.groups;
-    return {
-      ...node,
-      groups: nextGroups,
-    };
-  });
-
-  return {
-    ...graph,
-    nodes,
-    allGroups: [...new Set(nodes.flatMap((node) => node.groups))].sort(),
-  };
 }
 
 function applyPositions(
@@ -173,13 +157,12 @@ export default function App() {
   const [isSwitchingView, setIsSwitchingView] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(() => window.innerWidth >= 900);
+  const [mobileLayoutsOpen, setMobileLayoutsOpen] = useState(false);
   const [showConnections, setShowConnections] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveMessage, setSaveMessage] = useState("");
-  const baseGraphRef = useRef<GraphData>(emptyGraph);
-  const deviceGroupsRef = useRef(deviceGroups);
   const graphRef = useRef(graph);
   const activeViewRef = useRef(activeView);
   const showConnectionsRef = useRef(showConnections);
@@ -188,15 +171,12 @@ export default function App() {
   const viewConfigsRef = useRef<Record<string, LayoutConfig>>(normalizeViews());
   const persistedViewConfigsRef = useRef<Record<string, LayoutConfig>>(normalizeViews());
   const persistedGroupsRef = useRef<Record<string, string[]>>({});
+  const viewLoadRequestRef = useRef(0);
   const isDesktop = useIsDesktop();
 
   useEffect(() => {
     graphRef.current = graph;
   }, [graph]);
-
-  useEffect(() => {
-    deviceGroupsRef.current = deviceGroups;
-  }, [deviceGroups]);
 
   useEffect(() => {
     activeViewRef.current = activeView;
@@ -230,36 +210,52 @@ export default function App() {
     setSheetOpen(isDesktop);
   }, [isDesktop]);
 
-  const graphForView = useCallback(
-    (viewId: string, currentNodes?: GraphNode[]) => {
-      const nextGraph = mergeDeviceGroups(baseGraphRef.current, deviceGroupsRef.current);
-      const nextConfig = viewConfigsRef.current[viewId] ?? emptyLayoutConfig();
-      return applyPositions(nextGraph, nextConfig.nodes, currentNodes);
-    },
-    [],
-  );
+  useEffect(() => {
+    if (isDesktop) {
+      setMobileLayoutsOpen(false);
+    }
+  }, [isDesktop]);
 
-  const activateView = useCallback((viewId: string) => {
+  const applyLayout = useCallback((layout: (nodes: GraphNode[]) => GraphNode[]) => {
+    setGraph((current) => ({
+      ...current,
+      nodes: snapNodesToGrid(layout(current.nodes)),
+    }));
+    setSaveState("idle");
+    setSaveMessage("");
+    setMobileLayoutsOpen(false);
+  }, []);
+
+  const loadView = useCallback(async (viewId: string, requestId?: number) => {
+    const status = await fetchStatus();
+    if (requestId !== undefined && requestId !== viewLoadRequestRef.current) {
+      return;
+    }
+
+    const nextGraph = buildGraphFromStatus(status);
     const nextConfig = viewConfigsRef.current[viewId] ?? emptyLayoutConfig();
 
-    activeViewRef.current = viewId;
-    setActiveView(viewId);
-    setGraph(graphForView(viewId));
+    setGraph(applyPositions(nextGraph, nextConfig.nodes));
     setViewport(nextConfig.viewport ?? defaultViewport);
     setShowConnections(nextConfig.showConnections);
     setShowGrid(nextConfig.showGrid);
-  }, [graphForView]);
+    setError(status.error || null);
+  }, []);
 
   const refreshStatus = useCallback(async (keepPositions = true) => {
     const status = await fetchStatus();
-    baseGraphRef.current = buildGraphFromStatus(status);
+    const nextGraph = buildGraphFromStatus(status);
+    const activeConfig = viewConfigsRef.current[activeViewRef.current] ?? emptyLayoutConfig();
 
-    setGraph((current) => graphForView(
-      activeViewRef.current,
-      keepPositions ? current.nodes : undefined,
-    ));
+    setGraph((current) => {
+      return applyPositions(
+        nextGraph,
+        activeConfig.nodes,
+        keepPositions ? current.nodes : undefined,
+      );
+    });
     setError(status.error || null);
-  }, [graphForView]);
+  }, []);
 
   const snapshotActiveView = useCallback(() => {
     const currentViewId = activeViewRef.current;
@@ -292,18 +288,13 @@ export default function App() {
         viewConfigsRef.current = nextViews;
         persistedViewConfigsRef.current = nextViews;
         persistedGroupsRef.current = groups.groups || {};
-        deviceGroupsRef.current = groups.groups || {};
         setDeviceGroups(groups.groups || {});
       } catch (caught) {
         console.error(caught);
       }
       activeViewRef.current = nextActiveView;
       setActiveView(nextActiveView);
-      const nextConfig = viewConfigsRef.current[nextActiveView] ?? emptyLayoutConfig();
-      setViewport(nextConfig.viewport ?? defaultViewport);
-      setShowConnections(nextConfig.showConnections);
-      setShowGrid(nextConfig.showGrid);
-      await refreshStatus(false);
+      await loadView(nextActiveView);
     }
 
     bootstrap().catch((caught: unknown) => {
@@ -315,11 +306,11 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [refreshStatus]);
+  }, [loadView]);
 
   useAutoRefresh(autoRefresh, async () => {
     await refreshStatus(true);
-  }, 300000);
+  });
 
   const selectedNode = graph.nodes.find((node) => node.id === selectedId) || null;
   const filteredPeers = useMemo(
@@ -372,6 +363,7 @@ export default function App() {
       viewConfigsRef.current = savedViews;
       persistedViewConfigsRef.current = savedViews;
       persistedGroupsRef.current = groupsResult.groups.groups;
+      await refreshStatus(true);
       setSaveState("saved");
       setSaveMessage(`View ${currentViewId.slice(-1)} and groups saved`);
     } catch (caught) {
@@ -379,11 +371,17 @@ export default function App() {
       setSaveState("error");
       setSaveMessage("Save failed");
     }
-  }, [deviceGroups, snapshotActiveView]);
+  }, [deviceGroups, refreshStatus, snapshotActiveView]);
 
   useEffect(() => {
-    deviceGroupsRef.current = deviceGroups;
-    setGraph((current) => mergeDeviceGroups(current, deviceGroups));
+    setGraph((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) => ({
+        ...node,
+        groups: deviceGroups[node.hostname] || node.groups,
+      })),
+      allGroups: [...new Set(Object.values(deviceGroups).flat())].sort(),
+    }));
   }, [deviceGroups]);
 
   const currentPositions = useMemo(() => positionsFromNodes(graph.nodes), [graph.nodes]);
@@ -412,7 +410,7 @@ export default function App() {
     <div id="app">
       <div className="graphStage">
         <CanvasGraph
-          graph={isSwitchingView ? emptyGraph : graph}
+          graph={graph}
           filters={filters}
           selectedId={selectedId}
           showConnections={showConnections}
@@ -440,9 +438,13 @@ export default function App() {
         generatedAt={error ? "error" : graph.generatedAt}
         autoRefresh={autoRefresh}
         activeView={activeView}
+        isDesktop={isDesktop}
         isSwitchingView={isSwitchingView}
+        mobileLayoutsOpen={mobileLayoutsOpen}
         saveState={saveState}
         saveMessage={saveMessage}
+        onOrderByGroups={() => applyLayout(orderNodesByGroups)}
+        onOrderInGrid={() => applyLayout(orderNodesInGrid)}
         onSaveConfig={() => {
           void saveConfig();
         }}
@@ -451,20 +453,29 @@ export default function App() {
             return;
           }
 
+          const requestId = viewLoadRequestRef.current + 1;
+          viewLoadRequestRef.current = requestId;
           snapshotActiveView();
           setSaveState("idle");
           setSaveMessage("");
+          activeViewRef.current = viewId;
+          setActiveView(viewId);
           setIsSwitchingView(true);
-          void Promise.resolve()
-            .then(() => activateView(viewId))
+          void loadView(viewId, requestId)
             .catch((caught) => {
+              if (viewLoadRequestRef.current !== requestId) {
+                return;
+              }
               console.error(caught);
               setError(caught instanceof Error ? caught.message : "unknown error");
             })
             .finally(() => {
-              setIsSwitchingView(false);
+              if (viewLoadRequestRef.current === requestId) {
+                setIsSwitchingView(false);
+              }
             });
         }}
+        onToggleMobileLayouts={() => setMobileLayoutsOpen((current) => !current)}
         onToggleRefresh={() => setAutoRefresh((current) => !current)}
       />
 
@@ -555,12 +566,10 @@ export default function App() {
             setSaveMessage("");
           }}
           onOrderByGroups={() => {
-            setGraph((current) => ({
-              ...current,
-              nodes: snapNodesToGrid(orderNodesByGroups(current.nodes)),
-            }));
-            setSaveState("idle");
-            setSaveMessage("");
+            applyLayout(orderNodesByGroups);
+          }}
+          onOrderInGrid={() => {
+            applyLayout(orderNodesInGrid);
           }}
         />
       ) : null}

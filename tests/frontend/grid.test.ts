@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { moveNodeToNearestGridCell, NODE_GRID_SIZE, snapNodePointToGrid, snapNodesToGrid } from "../../frontend/src/graph/grid";
+import {
+  MIN_NODE_DISTANCE,
+  moveNodeToNearestGridCell,
+  NODE_GRID_SIZE,
+  snapNodePointToGrid,
+  snapNodesToGrid,
+} from "../../frontend/src/graph/grid";
 import type { GraphNode } from "../../frontend/src/types/graph";
 
 function makeNode(id: string, x: number, y: number): GraphNode {
@@ -54,6 +60,24 @@ describe("grid helpers", () => {
     expect(positions.size).toBe(3);
   });
 
+  it("keeps snapped nodes at least the minimum distance apart", () => {
+    const snapped = snapNodesToGrid([
+      makeNode("a", 0, 0),
+      makeNode("b", NODE_GRID_SIZE, 0),
+      makeNode("c", NODE_GRID_SIZE * 2, 0),
+    ]);
+
+    for (let index = 0; index < snapped.length; index += 1) {
+      for (let otherIndex = index + 1; otherIndex < snapped.length; otherIndex += 1) {
+        const a = snapped[index];
+        const b = snapped[otherIndex];
+        expect(Math.hypot((a?.x ?? 0) - (b?.x ?? 0), (a?.y ?? 0) - (b?.y ?? 0))).toBeGreaterThanOrEqual(
+          MIN_NODE_DISTANCE,
+        );
+      }
+    }
+  });
+
   it("moves dragged nodes to the nearest free grid cell", () => {
     const moved = moveNodeToNearestGridCell(
       [
@@ -66,7 +90,12 @@ describe("grid helpers", () => {
     );
 
     const movedNode = moved.find((node) => node.id === "b");
+    const anchorNode = moved.find((node) => node.id === "a");
 
-    expect(movedNode).toMatchObject({ x: NODE_GRID_SIZE, y: NODE_GRID_SIZE });
+    expect(movedNode).toBeDefined();
+    expect(anchorNode).toBeDefined();
+    expect(
+      Math.hypot((movedNode?.x ?? 0) - (anchorNode?.x ?? 0), (movedNode?.y ?? 0) - (anchorNode?.y ?? 0)),
+    ).toBeGreaterThanOrEqual(MIN_NODE_DISTANCE);
   });
 });

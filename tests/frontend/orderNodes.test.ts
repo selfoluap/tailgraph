@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { orderNodesByGroups } from "../../frontend/src/graph/orderNodes";
+import { orderNodesByGroups, orderNodesInGrid } from "../../frontend/src/graph/orderNodes";
 import type { GraphNode } from "../../frontend/src/types/graph";
 
 function makeNode(overrides: Partial<GraphNode> = {}): GraphNode {
@@ -58,5 +58,30 @@ describe("orderNodesByGroups", () => {
     expect(edgeNode?.vx).toBe(0);
     expect(edgeNode?.vy).toBe(0);
     expect(ungroupedNode?.x).not.toBe(edgeNode?.x);
+  });
+});
+
+describe("orderNodesInGrid", () => {
+  it("keeps self centered and aligns peers into a stable grid", () => {
+    const ordered = orderNodesInGrid([
+      makeNode({ id: "self", role: "self", name: "alpha", r: 21, x: 33, y: -12 }),
+      makeNode({ id: "peer-c", name: "peer-c" }),
+      makeNode({ id: "peer-a", name: "peer-a" }),
+      makeNode({ id: "peer-d", name: "peer-d" }),
+      makeNode({ id: "peer-b", name: "peer-b" }),
+    ]);
+
+    const selfNode = ordered.find((node) => node.id === "self");
+    const peerA = ordered.find((node) => node.id === "peer-a");
+    const peerB = ordered.find((node) => node.id === "peer-b");
+    const peerC = ordered.find((node) => node.id === "peer-c");
+    const peerD = ordered.find((node) => node.id === "peer-d");
+
+    expect(selfNode).toMatchObject({ x: 0, y: 0, vx: 0, vy: 0 });
+    expect(peerA).toMatchObject({ vx: 0, vy: 0 });
+    expect(peerB?.y).toBe(peerA?.y);
+    expect(peerC?.x).toBe(peerA?.x);
+    expect(peerD?.x).toBe(peerB?.x);
+    expect(peerC?.y).not.toBe(peerA?.y);
   });
 });

@@ -4,6 +4,7 @@ interface RightSidebarProps {
   onToggleConnections: () => void;
   onToggleGrid: () => void;
   onOrderByGroups: () => void;
+  onOrderInGrid: () => void;
 }
 
 export function RightSidebar({
@@ -12,6 +13,7 @@ export function RightSidebar({
   onToggleConnections,
   onToggleGrid,
   onOrderByGroups,
+  onOrderInGrid,
 }: RightSidebarProps) {
   return (
     <aside id="actionSidebar" aria-label="Layout actions">
@@ -27,7 +29,10 @@ export function RightSidebar({
       </div>
       <div className="sidebarCard sidebarCardStack">
         <button className="sidebarActionButton" onClick={onOrderByGroups} type="button">
-          GroupBy
+          Group by groups
+        </button>
+        <button className="sidebarActionButton sidebarActionButtonSecondary" onClick={onOrderInGrid} type="button">
+          Align to grid
         </button>
       </div>
     </aside>

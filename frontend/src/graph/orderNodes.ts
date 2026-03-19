@@ -4,6 +4,8 @@ const CLUSTER_RADIUS = 125;
 const CLUSTER_GAP = 320;
 const NODE_RING_BASE = 54;
 const NODE_RING_STEP = 14;
+const GRID_GAP_X = 220;
+const GRID_GAP_Y = 180;
 
 interface GroupBucket {
   key: string;
@@ -95,6 +97,41 @@ export function orderNodesByGroups(nodes: GraphNode[]): GraphNode[] {
         node.vx = 0;
         node.vy = 0;
       });
+  });
+
+  return nextNodes;
+}
+
+export function orderNodesInGrid(nodes: GraphNode[]): GraphNode[] {
+  const nextNodes = nodes.map((node) => ({ ...node }));
+  const selfNode = nextNodes.find((node) => node.role === "self");
+  const peers = nextNodes
+    .filter((node) => node.role !== "self")
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  if (selfNode) {
+    selfNode.x = 0;
+    selfNode.y = 0;
+    selfNode.vx = 0;
+    selfNode.vy = 0;
+  }
+
+  if (peers.length === 0) {
+    return nextNodes;
+  }
+
+  const columns = Math.ceil(Math.sqrt(peers.length));
+  const rows = Math.ceil(peers.length / columns);
+  const offsetX = ((columns - 1) * GRID_GAP_X) / 2;
+  const offsetY = ((rows - 1) * GRID_GAP_Y) / 2;
+
+  peers.forEach((node, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    node.x = column * GRID_GAP_X - offsetX;
+    node.y = row * GRID_GAP_Y - offsetY;
+    node.vx = 0;
+    node.vy = 0;
   });
 
   return nextNodes;

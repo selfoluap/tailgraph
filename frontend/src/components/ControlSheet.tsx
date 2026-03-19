@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FiltersState, GraphNode } from "../types/graph";
 import { statusText } from "../graph/buildGraph";
 
-const COLLAPSED_PERCENT = 58;
+const COLLAPSED_PERCENT = 94;
 const DRAG_THRESHOLD_PX = 40;
 
 interface ControlSheetProps {

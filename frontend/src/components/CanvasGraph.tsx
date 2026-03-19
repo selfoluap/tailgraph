@@ -30,6 +30,11 @@ interface ServiceHitRegion {
 }
 
 const COMPACT_NODE_SCALE_THRESHOLD = 0.7;
+const MOBILE_COMPACT_WIDTH_THRESHOLD = 768;
+const MIN_NODE_ZOOM_SCALE = 0.75;
+const MAX_NODE_ZOOM_SCALE = 1.8;
+const MIN_TEXT_ZOOM_SCALE = 0.45;
+const MAX_TEXT_ZOOM_SCALE = 1.4;
 
 export function getCanvasDensityScale(screenWidth: number) {
   if (screenWidth < 480) {
@@ -41,8 +46,27 @@ export function getCanvasDensityScale(screenWidth: number) {
   return 1;
 }
 
-export function getNodeRenderMode(scale: number) {
+export function getNodeZoomScale(scale: number) {
+  return Math.max(MIN_NODE_ZOOM_SCALE, Math.min(MAX_NODE_ZOOM_SCALE, scale));
+}
+
+export function getTextZoomScale(scale: number) {
+  return Math.max(MIN_TEXT_ZOOM_SCALE, Math.min(MAX_TEXT_ZOOM_SCALE, scale));
+}
+
+export function getNodeRenderMode(scale: number, screenWidth: number) {
+  if (screenWidth < MOBILE_COMPACT_WIDTH_THRESHOLD) {
+    return "compact";
+  }
   return scale < COMPACT_NODE_SCALE_THRESHOLD ? "compact" : "card";
+}
+
+function nodeCanvasScale(screenWidth: number, viewportScale: number) {
+  return getCanvasDensityScale(screenWidth) * getNodeZoomScale(viewportScale);
+}
+
+function textCanvasScale(screenWidth: number, viewportScale: number) {
+  return getCanvasDensityScale(screenWidth) * getTextZoomScale(viewportScale);
 }
 
 function roundRectPath(
@@ -67,27 +91,52 @@ function roundRectPath(
   context.closePath();
 }
 
-function drawServerGlyph(
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-) {
-  const rackHeight = (height - 10) / 2;
-  for (let index = 0; index < 2; index += 1) {
-    const top = y + 4 + index * (rackHeight + 2);
-    roundRectPath(context, x + 4, top, width - 8, rackHeight, 4);
-    context.fillStyle = "rgba(255,255,255,0.08)";
-    context.fill();
-
-    context.fillStyle = "rgba(232,236,248,0.55)";
-    context.fillRect(x + 10, top + rackHeight / 2 - 1, width - 20, 2);
-  }
-}
-
 function getVisibleServices(node: GraphNode) {
   return node.services.slice(0, 3);
+}
+
+function wrapServiceBadgeText(text: string, maxCharsPerLine: number) {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return [text];
+  }
+
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (candidate.length <= maxCharsPerLine) {
+      currentLine = candidate;
+      continue;
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+
+    if (word.length <= maxCharsPerLine) {
+      currentLine = word;
+      continue;
+    }
+
+    let remainder = word;
+    while (remainder.length > maxCharsPerLine) {
+      lines.push(remainder.slice(0, maxCharsPerLine - 1) + "-");
+      remainder = remainder.slice(maxCharsPerLine - 1);
+    }
+    currentLine = remainder;
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines.slice(0, 3);
+}
+
+function wrapNodeCardText(text: string, maxCharsPerLine: number) {
+  return wrapServiceBadgeText(text, maxCharsPerLine);
 }
 
 function nodePalette(rootStyle: CSSStyleDeclaration, node: GraphNode) {
@@ -101,37 +150,57 @@ function nodePalette(rootStyle: CSSStyleDeclaration, node: GraphNode) {
   };
 }
 
-function getNodeCardMetrics(node: GraphNode, screenWidth: number) {
-  const scale = getCanvasDensityScale(screenWidth);
+function getNodeCardMetrics(node: GraphNode, screenWidth: number, viewportScale: number) {
+  const scale = nodeCanvasScale(screenWidth, viewportScale);
   const services = getVisibleServices(node);
-  const width = 108 * scale;
-  const glyphHeight = 34 * scale;
-  const serviceAreaHeight = services.length > 0 ? services.length * 22 * scale + 8 * scale : 0;
-  const height = glyphHeight + serviceAreaHeight;
-  const radius = 12 * scale;
-  return { width, height, radius, glyphHeight };
+  const width = 300 * scale;
+  const headerHeight = 68 * scale;
+  const textScale = textCanvasScale(screenWidth, viewportScale);
+  const emptyStateFontSize = Math.max(14, Math.round(16 * textScale));
+  const emptyStateLines = wrapNodeCardText("No discovered ports", Math.max(28, Math.floor(32 * scale)));
+  const serviceHeights =
+    services.length > 0
+      ? services.map((service) => {
+          const badge = serviceBadgeMetrics(service, screenWidth, viewportScale);
+          const lines = wrapServiceBadgeText(badge.text, Math.max(28, Math.floor(32 * scale)));
+          return Math.max(badge.height, lines.length * (badge.fontSize + 5) + 20 * scale);
+        })
+      : [];
+  const serviceAreaHeight =
+    serviceHeights.length > 0
+      ? serviceHeights.reduce((total, height) => total + height, 0) +
+        Math.max(28, 32 * scale) +
+        (serviceHeights.length - 1) * 16
+      : Math.max(68, emptyStateLines.length * (emptyStateFontSize + 5) + 28 * scale);
+  const height = headerHeight + serviceAreaHeight;
+  const radius = 28 * scale;
+  return { width, height, radius, headerHeight };
 }
 
 function serviceBadgeText(service: GraphService): string {
   return `${service.label} ${service.port}`;
 }
 
-function serviceBadgeMetrics(service: GraphService, screenWidth: number) {
-  const scale = getCanvasDensityScale(screenWidth);
-  const fontSize = Math.max(10, Math.round(11 * scale));
-  const height = 20 * scale;
-  const radius = 10 * scale;
+function serviceBadgeMetrics(service: GraphService, screenWidth: number, viewportScale: number) {
+  const scale = nodeCanvasScale(screenWidth, viewportScale);
+  const fontSize = Math.max(14, Math.round(16 * textCanvasScale(screenWidth, viewportScale)));
+  const height = 52 * scale;
+  const radius = 24 * scale;
   const text = serviceBadgeText(service);
-  return { fontSize, height, radius, text };
+  const maxCharsPerLine = Math.max(28, Math.floor(32 * scale));
+  const lines = wrapServiceBadgeText(text, maxCharsPerLine);
+  const lineHeight = fontSize + 5;
+  const wrappedHeight = Math.max(height, lines.length * lineHeight + 20 * scale);
+  return { fontSize, height: wrappedHeight, radius, text, lines, lineHeight };
 }
 
-function compactNodeMetrics(screenWidth: number) {
-  const scale = getCanvasDensityScale(screenWidth);
-  const radius = 10 * scale;
+function compactNodeMetrics(screenWidth: number, viewportScale: number) {
+  const scale = nodeCanvasScale(screenWidth, viewportScale);
+  const radius = 26 * scale;
   return {
     radius,
-    hitRadius: radius + 8,
-    labelFontSize: Math.max(10, Math.round(12 * scale)),
+    hitRadius: radius + 20,
+    labelFontSize: Math.max(14, Math.round(17 * textCanvasScale(screenWidth, viewportScale))),
   };
 }
 
@@ -190,12 +259,12 @@ export function CanvasGraph({
   }, [viewport]);
 
   function findNodeAtPoint(clientX: number, clientY: number, width: number, height: number) {
-    const renderMode = getNodeRenderMode(viewport.scale);
+    const renderMode = getNodeRenderMode(viewport.scale, width);
     for (let index = filteredNodes.length - 1; index >= 0; index -= 1) {
       const node = filteredNodes[index];
       const point = worldToScreen(node.x, node.y, viewport, width, height);
       if (renderMode === "compact") {
-        const metrics = compactNodeMetrics(width);
+        const metrics = compactNodeMetrics(width, viewport.scale);
         const left = point.x - metrics.hitRadius;
         const right = point.x + metrics.hitRadius;
         const top = point.y - metrics.hitRadius;
@@ -205,7 +274,7 @@ export function CanvasGraph({
         }
         continue;
       }
-      const metrics = getNodeCardMetrics(node, width);
+      const metrics = getNodeCardMetrics(node, width, viewport.scale);
       const left = point.x - metrics.width / 2 - 8;
       const right = point.x + metrics.width / 2 + 8;
       const top = point.y - metrics.height / 2 - 8;
@@ -255,7 +324,7 @@ export function CanvasGraph({
     serviceHitRegionsRef.current = [];
 
     const rootStyle = getComputedStyle(document.documentElement);
-    const renderMode = getNodeRenderMode(viewport.scale);
+    const renderMode = getNodeRenderMode(viewport.scale, width);
 
     if (showGrid) {
       const topLeft = screenToWorld(0, 0, viewport, width, height);
@@ -307,7 +376,7 @@ export function CanvasGraph({
       const point = worldToScreen(node.x, node.y, viewport, width, height);
       const palette = nodePalette(rootStyle, node);
       if (renderMode === "compact") {
-        const metrics = compactNodeMetrics(width);
+        const metrics = compactNodeMetrics(width, viewport.scale);
 
         context.beginPath();
         context.arc(point.x, point.y, metrics.radius, 0, Math.PI * 2);
@@ -316,6 +385,13 @@ export function CanvasGraph({
         context.strokeStyle = palette.border;
         context.lineWidth = node.role === "self" ? 2.2 : 1.6;
         context.stroke();
+
+        if (node.services.length > 0) {
+          context.beginPath();
+          context.arc(point.x + metrics.radius - 2, point.y - metrics.radius + 2, 4, 0, Math.PI * 2);
+          context.fillStyle = "#fbbf24";
+          context.fill();
+        }
 
         context.save();
         context.shadowColor = palette.glow;
@@ -343,7 +419,7 @@ export function CanvasGraph({
         continue;
       }
 
-      const metrics = getNodeCardMetrics(node, width);
+      const metrics = getNodeCardMetrics(node, width, viewport.scale);
       const left = point.x - metrics.width / 2;
       const top = point.y - metrics.height / 2;
 
@@ -363,8 +439,6 @@ export function CanvasGraph({
       context.stroke();
       context.restore();
 
-      drawServerGlyph(context, left, top, metrics.width, metrics.glyphHeight);
-
       if (selectedId === node.id) {
         roundRectPath(context, left - 4, top - 4, metrics.width + 8, metrics.height + 8, metrics.radius + 4);
         context.strokeStyle = "#ffffff";
@@ -373,25 +447,36 @@ export function CanvasGraph({
       }
 
       const visibleServices = getVisibleServices(node);
+      const serviceSummary =
+        visibleServices.length > 0 ? `${node.services.length} service${node.services.length === 1 ? "" : "s"}` : "no services";
+
+      context.fillStyle = visibleServices.length > 0 ? "#fbbf24" : "#8ea2d5";
+      context.font = `700 ${Math.max(10, Math.round(7 * textCanvasScale(width, viewport.scale)))}px system-ui, sans-serif`;
+      context.textAlign = "left";
+      context.fillText(serviceSummary, left + 10, top + metrics.headerHeight - 9);
+
       if (visibleServices.length > 0) {
-        let offsetY = top + metrics.glyphHeight + 6;
+        let offsetY = top + metrics.headerHeight + 6;
         for (const service of visibleServices) {
-          const badge = serviceBadgeMetrics(service, width);
+          const badge = serviceBadgeMetrics(service, width, viewport.scale);
           context.font = `600 ${badge.fontSize}px system-ui, sans-serif`;
           const badgeX = left + 8;
           const badgeWidth = metrics.width - 16;
 
           roundRectPath(context, badgeX, offsetY, badgeWidth, badge.height, badge.radius);
-          context.fillStyle = "rgba(255,255,255,0.06)";
+          context.fillStyle = "rgba(251,191,36,0.12)";
           context.fill();
-          context.strokeStyle = palette.border;
+          context.strokeStyle = "rgba(251,191,36,0.45)";
           context.lineWidth = 1;
           context.stroke();
 
-          context.fillStyle = "#d7e2ff";
+          context.fillStyle = "#fff3c4";
           context.textAlign = "left";
-          context.textBaseline = "middle";
-          context.fillText(badge.text, badgeX + 10, offsetY + badge.height / 2);
+          context.textBaseline = "top";
+          const textTop = offsetY + Math.max(4, (badge.height - badge.lines.length * badge.lineHeight) / 2);
+          badge.lines.forEach((line, index) => {
+            context.fillText(line, badgeX + 10, textTop + index * badge.lineHeight);
+          });
           context.textBaseline = "alphabetic";
 
           serviceHitRegionsRef.current.push({
@@ -404,14 +489,29 @@ export function CanvasGraph({
           });
           offsetY += badge.height + 6;
         }
+      } else {
+        const emptyStateLines = wrapNodeCardText(
+          "No discovered ports",
+          Math.max(12, Math.floor(9 * textCanvasScale(width, viewport.scale))),
+        );
+        const emptyStateFontSize = Math.max(10, Math.round(7 * textCanvasScale(width, viewport.scale)));
+        const lineHeight = emptyStateFontSize + 3;
+        context.fillStyle = "#90a3d3";
+        context.font = `600 ${emptyStateFontSize}px system-ui, sans-serif`;
+        context.textAlign = "left";
+        context.textBaseline = "top";
+        emptyStateLines.forEach((line, index) => {
+          context.fillText(line, left + 10, top + metrics.headerHeight + 8 + index * lineHeight);
+        });
+        context.textBaseline = "alphabetic";
       }
 
       context.fillStyle = "#f3f6ff";
-      const labelFontSize = Math.max(12, Math.round(15 * getCanvasDensityScale(width)));
+      const labelFontSize = Math.max(12, Math.round(10 * textCanvasScale(width, viewport.scale)));
       context.font = `700 ${labelFontSize}px system-ui, sans-serif`;
       context.textAlign = "center";
       const label = node.name.length > 22 ? `${node.name.slice(0, 19)}...` : node.name;
-      context.fillText(label, point.x, top + metrics.height + Math.max(18, 22 * getCanvasDensityScale(width)));
+      context.fillText(label, point.x, top + metrics.height + Math.max(18, 22 * nodeCanvasScale(width, viewport.scale)));
     }
   }, [filteredEdges, filteredNodes, graph.nodes, selectedId, showConnections, showGrid, viewport]);
 
